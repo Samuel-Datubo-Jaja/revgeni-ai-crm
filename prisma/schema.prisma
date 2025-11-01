@@ -1,0 +1,147 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Org {
+  id        String          @id @default(cuid())
+  name      String
+  createdAt DateTime        @default(now())
+  companies Company[]
+  deals     Deal[]
+  sequences EmailSequence[]
+  events    Event[]
+  people    Person[]
+  users     UserOrg[]
+}
+
+model User {
+  id        String    @id
+  email     String    @unique
+  createdAt DateTime  @default(now())
+  orgs      UserOrg[]
+}
+
+model UserOrg {
+  id     String @id @default(cuid())
+  userId String
+  orgId  String
+  role   String
+  org    Org    @relation(fields: [orgId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([userId, orgId])
+}
+
+model Company {
+  id        String        @id @default(cuid())
+  orgId     String
+  name      String
+  domain    String?
+  industry  String?
+  sizeBand  String?
+  geography String?
+  status    CompanyStatus @default(NEW)
+  score     Int?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  org       Org           @relation(fields: [orgId], references: [id])
+  deals     Deal[]
+  events    Event[]
+  people    Person[]
+
+  @@unique([orgId, domain])
+  @@index([orgId, status])
+}
+
+model Person {
+  id        String   @id @default(cuid())
+  orgId     String
+  companyId String
+  fullName  String
+  title     String?
+  email     String?
+  linkedin  String?
+  createdAt DateTime @default(now())
+  events    Event[]
+  company   Company  @relation(fields: [companyId], references: [id])
+  org       Org      @relation(fields: [orgId], references: [id])
+
+  @@index([orgId, companyId])
+}
+
+model Deal {
+  id        String   @id @default(cuid())
+  orgId     String
+  companyId String
+  name      String
+  value     Int?
+  stage     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  company   Company  @relation(fields: [companyId], references: [id])
+  org       Org      @relation(fields: [orgId], references: [id])
+  events    Event[]
+
+  @@index([orgId, stage])
+}
+
+model Event {
+  id        String   @id @default(cuid())
+  orgId     String
+  companyId String?
+  personId  String?
+  dealId    String?
+  type      String
+  summary   String?
+  body      String?
+  at        DateTime @default(now())
+  company   Company? @relation(fields: [companyId], references: [id])
+  deal      Deal?    @relation(fields: [dealId], references: [id])
+  org       Org      @relation(fields: [orgId], references: [id])
+  person    Person?  @relation(fields: [personId], references: [id])
+
+  @@index([orgId, at])
+}
+
+model EmailSequence {
+  id        String   @id @default(cuid())
+  orgId     String
+  name      String
+  steps     Json
+  fromName  String?
+  fromEmail String?
+  createdAt DateTime @default(now())
+  org       Org      @relation(fields: [orgId], references: [id])
+}
+
+model OutboxEmail {
+  id          String   @id @default(cuid())
+  orgId       String
+  sequenceId  String
+  companyId   String?
+  personId    String?
+  stepIndex   Int
+  scheduledAt DateTime
+  status      String
+  providerId  String?
+  error       String?
+  createdAt   DateTime @default(now())
+
+  @@index([orgId, scheduledAt, status])
+}
+
+enum CompanyStatus {
+  NEW
+  QUALIFIED
+  CONTACTED
+  MEETING
+  PROPOSAL
+  WON
+  LOST
+}
