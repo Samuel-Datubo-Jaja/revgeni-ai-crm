@@ -1,18 +1,10 @@
 import { createYoga, createSchema } from "graphql-yoga";
 import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 
 export const runtime = "nodejs";
-
-async function getOrgIdFromRequest(_req: NextRequest): Promise<string> {
-  try {
-    const { orgId } = await auth();
-    return orgId ?? "demo-org";
-  } catch {
-    return "demo-org";
-  }
-}
 
 const typeDefs = /* GraphQL */ `
   enum CompanyStatus { NEW QUALIFIED CONTACTED MEETING PROPOSAL WON LOST }
@@ -149,7 +141,6 @@ const typeDefs = /* GraphQL */ `
 `;
 
 type GraphQLContext = {
-  req: NextRequest;
   orgId: string;
   userId?: string | null;
 };
@@ -188,7 +179,6 @@ const resolvers = {
   },
 
   Mutation: {
-    // Existing mutations
     upsertCompany: async (_: unknown, { input }: any, ctx: GraphQLContext) => {
       if (!ctx.userId) {
         throw new Error("Authentication required");
@@ -225,7 +215,6 @@ const resolvers = {
       return true;
     },
 
-    // NEW: Bulk create companies (for AI lead imports)
     bulkCreateCompanies: async (
       _: unknown,
       { companies }: any,
@@ -235,7 +224,6 @@ const resolvers = {
         throw new Error("Authentication required");
       }
 
-      // Ensure org exists
       await prisma.org.upsert({
         where: { id: ctx.orgId },
         update: {},
@@ -259,7 +247,6 @@ const resolvers = {
       return { count: result.count };
     },
 
-    // NEW: Create person
     createPerson: async (
       _: unknown,
       { input }: any,
@@ -281,7 +268,6 @@ const resolvers = {
       });
     },
 
-    // NEW: Create event
     createEvent: async (
       _: unknown,
       { input }: any,
@@ -305,7 +291,6 @@ const resolvers = {
       });
     },
 
-    // NEW: Create deal
     createDeal: async (
       _: unknown,
       { input }: any,
@@ -326,7 +311,6 @@ const resolvers = {
       });
     },
 
-    // NEW: Create email sequence
     createEmailSequence: async (
       _: unknown,
       { input }: any,
@@ -347,7 +331,6 @@ const resolvers = {
       });
     },
 
-    // Existing seed mutation
     runLeadWorker: async (
       _: unknown,
       _args: any,
@@ -394,13 +377,11 @@ const { handleRequest } = createYoga<GraphQLContext>({
     try {
       const { userId, orgId } = await auth();
       return {
-        req: request,
         orgId: orgId ?? "demo-org",
         userId,
       };
     } catch (e) {
       return {
-        req: request,
         orgId: "demo-org",
         userId: null,
       };
@@ -408,6 +389,14 @@ const { handleRequest } = createYoga<GraphQLContext>({
   },
 });
 
-export const GET = handleRequest;
-export const POST = handleRequest;
-export const OPTIONS = handleRequest;
+export async function GET(request: NextRequest): Promise<Response> {
+  return (handleRequest as any)(request);
+}
+
+export async function POST(request: NextRequest): Promise<Response> {
+  return (handleRequest as any)(request);
+}
+
+export async function OPTIONS(request: NextRequest): Promise<Response> {
+  return (handleRequest as any)(request);
+}
