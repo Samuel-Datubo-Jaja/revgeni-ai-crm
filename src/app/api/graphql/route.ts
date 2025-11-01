@@ -408,4 +408,6 @@ const { handleRequest } = createYoga<GraphQLContext>({
   },
 });
 
-export { handleRequest as GET, handleRequest as POST, handleRequest as OPTIONS };
+export const GET = handleRequest;
+export const POST = handleRequest;
+export const OPTIONS = handleRequest;
