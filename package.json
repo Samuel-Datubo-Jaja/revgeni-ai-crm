@@ -2,6 +2,13 @@
   "name": "revgeni-crm",
   "version": "0.1.0",
   "private": true,
+  "trustedDependencies": [
+    "@clerk/shared",
+    "@prisma/engines",
+    "prisma",
+    "sharp",
+    "unrs-resolver"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
