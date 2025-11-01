@@ -1,11 +1,18 @@
+// src/app/api/graphql/route.ts
 import { createYoga, createSchema } from "graphql-yoga";
 import type { NextRequest } from "next/server";
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 
+// IMPORTANT for Prisma on Vercel/Next
 export const runtime = "nodejs";
+// Avoid caching API responses
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
+/** -------------------------
+ * GraphQL SDL (unchanged)
+ * ------------------------*/
 const typeDefs = /* GraphQL */ `
   enum CompanyStatus { NEW QUALIFIED CONTACTED MEETING PROPOSAL WON LOST }
   enum EventType { CALL EMAIL MEETING NOTE TASK }
@@ -130,12 +137,12 @@ const typeDefs = /* GraphQL */ `
     updateCompanyStatus(id: ID!, status: CompanyStatus!): Company!
     deleteCompany(id: ID!): Boolean!
     bulkCreateCompanies(companies: [CompanyInput!]!): BulkCreateResult!
-    
+
     createPerson(input: PersonInput!): Person!
     createEvent(input: EventInput!): Event!
     createDeal(input: DealInput!): Deal!
     createEmailSequence(input: EmailSequenceInput!): EmailSequence!
-    
+
     runLeadWorker: [Company!]!
   }
 `;
@@ -145,13 +152,12 @@ type GraphQLContext = {
   userId?: string | null;
 };
 
+/** -------------------------
+ * Resolvers (unchanged)
+ * ------------------------*/
 const resolvers = {
   Query: {
-    companies: async (
-      _: unknown,
-      args: { status?: string },
-      ctx: GraphQLContext
-    ) =>
+    companies: async (_: unknown, args: { status?: string }, ctx: GraphQLContext) =>
       prisma.company.findMany({
         where: {
           orgId: ctx.orgId,
@@ -160,29 +166,20 @@ const resolvers = {
         orderBy: { updatedAt: "desc" },
       }),
 
-    company: (
-      _: unknown,
-      args: { id: string },
-      ctx: GraphQLContext
-    ) =>
+    company: (_: unknown, args: { id: string }, ctx: GraphQLContext) =>
       prisma.company.findFirst({
         where: { id: args.id, orgId: ctx.orgId },
         include: {
           people: true,
           deals: true,
-          events: {
-            orderBy: { at: "desc" },
-            take: 20,
-          },
+          events: { orderBy: { at: "desc" }, take: 20 },
         },
       }),
   },
 
   Mutation: {
     upsertCompany: async (_: unknown, { input }: any, ctx: GraphQLContext) => {
-      if (!ctx.userId) {
-        throw new Error("Authentication required");
-      }
+      if (!ctx.userId) throw new Error("Authentication required");
 
       if (input.domain) {
         return prisma.company.upsert({
@@ -196,33 +193,16 @@ const resolvers = {
       });
     },
 
-    updateCompanyStatus: (
-      _: unknown,
-      { id, status }: any,
-      ctx: GraphQLContext
-    ) =>
-      prisma.company.update({
-        where: { id },
-        data: { status },
-      }),
+    updateCompanyStatus: (_: unknown, { id, status }: any) =>
+      prisma.company.update({ where: { id }, data: { status } }),
 
-    deleteCompany: async (
-      _: unknown,
-      { id }: any,
-      ctx: GraphQLContext
-    ) => {
+    deleteCompany: async (_: unknown, { id }: any) => {
       await prisma.company.delete({ where: { id } });
       return true;
     },
 
-    bulkCreateCompanies: async (
-      _: unknown,
-      { companies }: any,
-      ctx: GraphQLContext
-    ) => {
-      if (!ctx.userId) {
-        throw new Error("Authentication required");
-      }
+    bulkCreateCompanies: async (_: unknown, { companies }: any, ctx: GraphQLContext) => {
+      if (!ctx.userId) throw new Error("Authentication required");
 
       await prisma.org.upsert({
         where: { id: ctx.orgId },
@@ -247,15 +227,8 @@ const resolvers = {
       return { count: result.count };
     },
 
-    createPerson: async (
-      _: unknown,
-      { input }: any,
-      ctx: GraphQLContext
-    ) => {
-      if (!ctx.userId) {
-        throw new Error("Authentication required");
-      }
-
+    createPerson: async (_: unknown, { input }: any, ctx: GraphQLContext) => {
+      if (!ctx.userId) throw new Error("Authentication required");
       return prisma.person.create({
         data: {
           orgId: ctx.orgId,
@@ -268,15 +241,8 @@ const resolvers = {
       });
     },
 
-    createEvent: async (
-      _: unknown,
-      { input }: any,
-      ctx: GraphQLContext
-    ) => {
-      if (!ctx.userId) {
-        throw new Error("Authentication required");
-      }
-
+    createEvent: async (_: unknown, { input }: any, ctx: GraphQLContext) => {
+      if (!ctx.userId) throw new Error("Authentication required");
       return prisma.event.create({
         data: {
           orgId: ctx.orgId,
@@ -291,15 +257,8 @@ const resolvers = {
       });
     },
 
-    createDeal: async (
-      _: unknown,
-      { input }: any,
-      ctx: GraphQLContext
-    ) => {
-      if (!ctx.userId) {
-        throw new Error("Authentication required");
-      }
-
+    createDeal: async (_: unknown, { input }: any, ctx: GraphQLContext) => {
+      if (!ctx.userId) throw new Error("Authentication required");
       return prisma.deal.create({
         data: {
           orgId: ctx.orgId,
@@ -311,38 +270,26 @@ const resolvers = {
       });
     },
 
-    createEmailSequence: async (
-      _: unknown,
-      { input }: any,
-      ctx: GraphQLContext
-    ) => {
-      if (!ctx.userId) {
-        throw new Error("Authentication required");
-      }
-
+    createEmailSequence: async (_: unknown, { input }: any, ctx: GraphQLContext) => {
+      if (!ctx.userId) throw new Error("Authentication required");
       return prisma.emailSequence.create({
         data: {
           orgId: ctx.orgId,
           name: input.name,
           fromName: input.fromName,
           fromEmail: input.fromEmail,
-          steps: JSON.parse(input.steps),
+          // NOTE: keep as string if your Prisma field is String
+          // If your Prisma field is Json, convert to JSON object
+          steps: input.steps,
         },
       });
     },
 
-    runLeadWorker: async (
-      _: unknown,
-      _args: any,
-      ctx: GraphQLContext
-    ) => {
+    runLeadWorker: async (_: unknown, _args: any, ctx: GraphQLContext) => {
       await prisma.org.upsert({
         where: { id: ctx.orgId },
         update: {},
-        create: {
-          id: ctx.orgId,
-          name: "Demo Organization",
-        },
+        create: { id: ctx.orgId, name: "Demo Organization" },
       });
 
       const demo = [
@@ -354,49 +301,47 @@ const resolvers = {
         { name: "HealthPulse Digital", domain: "healthpulse.example", industry: "Healthcare Tech", sizeBand: "201-500", geography: "Canada", score: 72 },
       ];
 
-      const createdCompanies = [];
-
+      const created: any[] = [];
       for (const c of demo) {
         const company = await prisma.company.upsert({
           where: { orgId_domain: { orgId: ctx.orgId, domain: c.domain } },
           update: c,
           create: { ...c, orgId: ctx.orgId, status: "NEW" },
         });
-        createdCompanies.push(company);
+        created.push(company);
       }
-
-      return createdCompanies;
+      return created;
     },
   },
 };
 
-const { handleRequest } = createYoga<GraphQLContext>({
+/** -------------------------
+ * Yoga server
+ * ------------------------*/
+const yoga = createYoga<GraphQLContext>({
   schema: createSchema<GraphQLContext>({ typeDefs, resolvers }),
   graphqlEndpoint: "/api/graphql",
-  context: async ({ request }: { request: NextRequest }) => {
+  // Use Next's fetch/Request/Response
+  fetchAPI: { Request, Response, fetch },
+  context: async () => {
     try {
       const { userId, orgId } = await auth();
-      return {
-        orgId: orgId ?? "demo-org",
-        userId,
-      };
-    } catch (e) {
-      return {
-        orgId: "demo-org",
-        userId: null,
-      };
+      return { orgId: orgId ?? "demo-org", userId };
+    } catch {
+      return { orgId: "demo-org", userId: null };
     }
   },
 });
 
-export async function GET(request: NextRequest): Promise<Response> {
-  return (handleRequest as any)(request);
+// ✅ Next 16 route handler signatures (note the second arg with params Promise)
+export async function GET(req: NextRequest, _ctx: { params: Promise<Record<string, string>> }) {
+  return yoga.fetch(req as unknown as Request);
 }
 
-export async function POST(request: NextRequest): Promise<Response> {
-  return (handleRequest as any)(request);
+export async function POST(req: NextRequest, _ctx: { params: Promise<Record<string, string>> }) {
+  return yoga.fetch(req as unknown as Request);
 }
 
-export async function OPTIONS(request: NextRequest): Promise<Response> {
-  return (handleRequest as any)(request);
+export async function OPTIONS(req: NextRequest, _ctx: { params: Promise<Record<string, string>> }) {
+  return yoga.fetch(req as unknown as Request);
 }

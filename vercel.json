@@ -1,0 +1,4 @@
+{
+  "buildCommand": "pnpm --yes approve-builds prisma @prisma/engines sharp @clerk/shared unrs-resolver && pnpm run build",
+  "framework": "nextjs"
+}
