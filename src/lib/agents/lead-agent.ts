@@ -2,7 +2,6 @@
 import { Exa } from "exa-js";
 import { generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
-import { z } from "zod";
 
 const exa = new Exa(process.env.EXA_API_KEY);
 
@@ -16,13 +15,17 @@ export interface LeadSearchResult {
   score: number;
   url?: string;
   reasoning?: string;
+  phone?: string; // ✅ Added phone number
+  contactInfo?: {
+    mainPhone?: string;
+    salesPhone?: string;
+    supportPhone?: string;
+    headquarters?: string;
+  };
 }
 
 /**
- * Find leads using Exa API + Claude AI Worker
- * This is a true AI Agent that:
- * 1. Uses Exa for web search discovery
- * 2. Uses Claude AI to intelligently analyze and score leads
+ * Enhanced AI Agent that finds leads with phone numbers
  */
 export async function findLeadsStructured(
   industry?: string,
@@ -30,8 +33,9 @@ export async function findLeadsStructured(
   size?: "startup" | "mid" | "enterprise"
 ): Promise<LeadSearchResult[]> {
   try {
+    console.log("🔍 Enhanced AI Agent: Searching for companies with contact info...");
+    
     // Step 1: Search for companies using Exa API
-    console.log("🔍 Searching for companies using Exa API...");
     const rawResults = await searchCompaniesWithExa(industry, geography, size);
 
     if (rawResults.length === 0) {
@@ -39,9 +43,9 @@ export async function findLeadsStructured(
       return [];
     }
 
-    // Step 2: Use Claude AI Worker to analyze and score the results
-    console.log("🤖 AI Worker analyzing leads with Claude...");
-    const aiScoredLeads = await analyzeLeadsWithAI(rawResults, {
+    // Step 2: Enhanced AI analysis including phone number extraction
+    console.log("🤖 AI Worker analyzing leads and extracting contact info...");
+    const aiScoredLeads = await analyzeLeadsWithContactInfo(rawResults, {
       industry,
       geography,
       size,
@@ -49,32 +53,28 @@ export async function findLeadsStructured(
 
     return aiScoredLeads;
   } catch (error) {
-    console.error("Lead finding error:", error);
+    console.error("Enhanced lead finding error:", error);
     throw new Error(
-      `Failed to find leads: ${error instanceof Error ? error.message : "Unknown error"}`
+      `Failed to find leads with contact info: ${error instanceof Error ? error.message : "Unknown error"}`
     );
   }
 }
 
 /**
- * Step 1: Search companies using Exa API
+ * Enhanced Exa search focusing on company contact pages
  */
 async function searchCompaniesWithExa(
   industry?: string,
   geography?: string,
   size?: "startup" | "mid" | "enterprise"
 ): Promise<Array<any>> {
-  // Build search query
+  // Build enhanced search queries
+  const queries = [];
+  
+  // Primary query
   const queryParts = [];
-
-  if (industry) {
-    queryParts.push(`${industry} companies`);
-  }
-
-  if (geography) {
-    queryParts.push(`based in ${geography}`);
-  }
-
+  if (industry) queryParts.push(`${industry} companies`);
+  if (geography) queryParts.push(`based in ${geography}`);
   if (size) {
     const sizeMap = {
       startup: "startup (1-50 employees)",
@@ -83,29 +83,56 @@ async function searchCompaniesWithExa(
     };
     queryParts.push(sizeMap[size]);
   }
+  
+  const primaryQuery = queryParts.length > 0 
+    ? queryParts.join(" ") 
+    : "fastest growing technology companies";
+    
+  queries.push(primaryQuery);
+  
+  // Contact-focused queries
+  if (industry) {
+    queries.push(`${industry} companies contact information phone`);
+    queries.push(`${industry} company headquarters contact details`);
+  }
 
-  // Default if no filters
-  const query =
-    queryParts.length > 0
-      ? queryParts.join(" ")
-      : "fastest growing technology companies";
+  console.log(`🔍 Enhanced queries: ${queries.join(' | ')}`);
 
-  console.log(`Query: "${query}"`);
+  // Search with multiple queries for better contact info
+  const allResults: any[] = [];
+  
+  for (const query of queries.slice(0, 2)) { // Limit to 2 queries to avoid rate limits
+    try {
+      const results = await exa.searchAndContents(query, {
+        numResults: 15,
+        text: true,
+        livecrawl: "never",
+        includeDomains: [], // Could add specific domains if needed
+        excludeDomains: ["linkedin.com", "facebook.com", "twitter.com"], // Focus on company websites
+      });
+      
+      allResults.push(...results.results);
+    } catch (error) {
+      console.warn(`Query failed: ${query}`, error);
+    }
+  }
 
-  // Search using Exa API
-  const results = await exa.searchAndContents(query, {
-    numResults: 20,
-    text: true,
-    livecrawl: "never", // Use cached results for speed
-  });
+  // Deduplicate by domain
+  const uniqueResults = allResults.reduce((acc, result) => {
+    const domain = new URL(result.url).hostname;
+    if (!acc.find((r: any) => new URL(r.url).hostname === domain)) {
+      acc.push(result);
+    }
+    return acc;
+  }, []);
 
-  return results.results;
+  return uniqueResults.slice(0, 20);
 }
 
 /**
- * Step 2: Use Claude AI Worker to intelligently analyze and score leads
+ * Enhanced AI analysis with phone number and contact extraction
  */
-async function analyzeLeadsWithAI(
+async function analyzeLeadsWithContactInfo(
   rawResults: any[],
   filters: {
     industry?: string;
@@ -113,15 +140,15 @@ async function analyzeLeadsWithAI(
     size?: "startup" | "mid" | "enterprise";
   }
 ): Promise<LeadSearchResult[]> {
-  // Format results for Claude to analyze
+  // Format results for AI analysis
   const companiesJson = rawResults.map((result) => ({
     title: result.title,
     url: result.url,
-    text: result.text?.substring(0, 500), // Limit text for token efficiency
+    text: result.text?.substring(0, 1000), // Increased for better contact extraction
   }));
 
-  // Create prompt for Claude AI Worker
-  const prompt = `You are an expert AI lead researcher. Analyze these companies and score them based on the given criteria.
+  // Enhanced prompt for contact information extraction
+  const prompt = `You are an expert AI lead researcher specializing in B2B contact extraction. Analyze these companies and extract comprehensive contact information.
 
 FILTERING CRITERIA:
 - Industry: ${filters.industry || "Any"}
@@ -131,13 +158,25 @@ FILTERING CRITERIA:
 COMPANIES TO ANALYZE:
 ${JSON.stringify(companiesJson, null, 2)}
 
-YOUR TASK:
+YOUR ENHANCED TASK:
 1. Extract company information (name, domain, industry, geography, size, employee count)
-2. Score each company from 0-100 based on:
-   - How well it matches the specified filters (40 points max)
-   - Company growth indicators (funding, expansion, market position) (30 points max)
-   - Business viability and stability (30 points max)
-3. Return ONLY valid JSON in this format, no other text:
+2. EXTRACT CONTACT INFORMATION:
+   - Main phone number (look for "phone:", "tel:", "+1", "(555)", "call us")
+   - Sales phone (look for "sales", "business development")
+   - Support phone (look for "support", "help", "customer service")
+   - Headquarters address
+3. Score each company from 0-100 based on:
+   - Filter match (40 points)
+   - Growth indicators (30 points)
+   - Contact information availability (30 points - bonus for complete contact info)
+
+CONTACT EXTRACTION RULES:
+- Look for phone patterns: +1-xxx-xxx-xxxx, (xxx) xxx-xxxx, xxx.xxx.xxxx
+- Prioritize main/sales numbers over support
+- Extract full addresses when available
+- Look in "Contact", "About", "Headquarters" sections
+
+Return ONLY valid JSON in this format:
 
 {
   "leads": [
@@ -149,27 +188,34 @@ YOUR TASK:
       "size": "startup|mid|enterprise",
       "employees": 150,
       "score": 85,
-      "reasoning": "Brief explanation of why this score"
+      "phone": "+1-555-123-4567",
+      "contactInfo": {
+        "mainPhone": "+1-555-123-4567",
+        "salesPhone": "+1-555-123-4568",
+        "supportPhone": "+1-555-123-4569",
+        "headquarters": "123 Main St, City, State 12345"
+      },
+      "reasoning": "Strong match, excellent contact info available"
     }
   ]
 }
 
 IMPORTANT:
 - Only return valid JSON
-- Filter out any non-company results
-- Score should reflect fit to the criteria, not just quality
-- Include reasoning for each score`;
+- Include phone numbers when found (even partial matches)
+- Award higher scores for companies with complete contact info
+- Filter out non-company results`;
 
   try {
-    // Call Claude AI Worker via Vercel AI SDK
+    // Call OpenAI with enhanced prompt
     const { text } = await generateText({
       model: openai("gpt-4o"),
       prompt,
-      temperature: 0.7, // Balanced for analysis
-      maxOutputTokens: 2000,
+      temperature: 0.3, // Lower temperature for better extraction accuracy
+      maxOutputTokens: 3000, // Increased for contact info
     });
 
-    // Parse Claude's response
+    // Parse AI response
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error("Failed to parse AI response");
@@ -178,15 +224,23 @@ IMPORTANT:
     const parsedResponse = JSON.parse(jsonMatch[0]);
     const leads: LeadSearchResult[] = parsedResponse.leads
       .filter((lead: any) => lead.name && lead.domain)
+      .map((lead: any) => ({
+        ...lead,
+        // Ensure phone is at top level for backward compatibility
+        phone: lead.phone || lead.contactInfo?.mainPhone || lead.contactInfo?.salesPhone,
+      }))
       .sort((a: any, b: any) => b.score - a.score)
-      .slice(0, 15); // Limit to 15 results
+      .slice(0, 15);
 
-    console.log(`✅ AI Worker analyzed ${leads.length} leads`);
+    // Log contact info success rate
+    const leadsWithPhone = leads.filter(lead => lead.phone).length;
+    console.log(`✅ Enhanced AI Worker: ${leads.length} leads analyzed, ${leadsWithPhone} with phone numbers (${Math.round(leadsWithPhone/leads.length*100)}% success rate)`);
+
     return leads;
   } catch (error) {
-    console.error("Claude AI analysis error:", error);
+    console.error("Enhanced AI analysis error:", error);
     throw new Error(
-      `AI Worker failed to analyze leads: ${error instanceof Error ? error.message : "Unknown error"}`
+      `Enhanced AI Worker failed: ${error instanceof Error ? error.message : "Unknown error"}`
     );
   }
 }

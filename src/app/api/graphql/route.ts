@@ -1,19 +1,19 @@
-// src/app/api/graphql/route.ts
-import { createYoga, createSchema } from "graphql-yoga";
-import type { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { NextRequest } from "next/server";
+import { createYoga } from "graphql-yoga";
+import { createSchema } from "graphql-yoga";
 import { auth } from "@clerk/nextjs/server";
+import { prisma } from "@/lib/prisma";
 
-// IMPORTANT for Prisma on Vercel/Next
 export const runtime = "nodejs";
-// Avoid caching API responses
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
-/** -------------------------
- * GraphQL SDL (unchanged)
- * ------------------------*/
-const typeDefs = /* GraphQL */ `
+// GraphQL Context Type
+interface GraphQLContext {
+  userId: string | null;
+  orgId: string;
+}
+
+const typeDefs = `
   enum CompanyStatus { NEW QUALIFIED CONTACTED MEETING PROPOSAL WON LOST }
   enum EventType { CALL EMAIL MEETING NOTE TASK }
 
@@ -24,38 +24,42 @@ const typeDefs = /* GraphQL */ `
     industry: String
     sizeBand: String
     geography: String
-    status: CompanyStatus!
+    status: String!
     score: Int
     createdAt: String!
     updatedAt: String!
+    people: [Person!]!
+    deals: [Deal!]!
+    events: [Event!]!
   }
 
   type Person {
     id: ID!
-    companyId: ID!
     fullName: String!
     title: String
     email: String
+    phone: String
     linkedin: String
     createdAt: String!
   }
 
+  type Deal {
+    id: ID!
+    name: String!
+    value: Float
+    stage: String!
+    expectedCloseDate: String 
+    description: String
+    createdAt: String!
+    updatedAt: String!
+  }
+
   type Event {
     id: ID!
-    type: EventType!
+    type: String!
     summary: String
     body: String
     at: String!
-  }
-
-  type Deal {
-    id: ID!
-    companyId: ID!
-    name: String!
-    value: Int
-    stage: String!
-    createdAt: String!
-    updatedAt: String!
   }
 
   type EmailSequence {
@@ -67,25 +71,10 @@ const typeDefs = /* GraphQL */ `
     createdAt: String!
   }
 
-  type CompanyDetail {
-    id: ID!
-    name: String!
-    domain: String
-    industry: String
-    sizeBand: String
-    geography: String
-    status: CompanyStatus!
-    score: Int
-    people: [Person!]!
-    deals: [Deal!]!
-    events: [Event!]!
-    createdAt: String!
-    updatedAt: String!
-  }
-
   type Query {
-    companies(status: CompanyStatus): [Company!]!
-    company(id: ID!): CompanyDetail
+    companies(status: String): [Company!]!
+    company(id: ID!): Company
+    runLeadWorker: [Company!]!
   }
 
   input CompanyInput {
@@ -117,8 +106,10 @@ const typeDefs = /* GraphQL */ `
   input DealInput {
     companyId: ID!
     name: String!
-    value: Int
+    value: Float
     stage: String!
+    expectedCloseDate: String    
+    description: String 
   }
 
   input EmailSequenceInput {
@@ -128,13 +119,28 @@ const typeDefs = /* GraphQL */ `
     steps: String!
   }
 
+  input ContactInput {
+    fullName: String!
+    title: String
+    email: String
+    phone: String
+    linkedin: String
+  }
+
+  input ActivityInput {
+    type: String!
+    summary: String!
+    body: String
+    at: String!
+  }
+
   type BulkCreateResult {
     count: Int!
   }
 
   type Mutation {
     upsertCompany(input: CompanyInput!): Company!
-    updateCompanyStatus(id: ID!, status: CompanyStatus!): Company!
+    updateCompanyStatus(id: ID!, status: String!): Company!
     deleteCompany(id: ID!): Boolean!
     bulkCreateCompanies(companies: [CompanyInput!]!): BulkCreateResult!
 
@@ -144,37 +150,104 @@ const typeDefs = /* GraphQL */ `
     createEmailSequence(input: EmailSequenceInput!): EmailSequence!
 
     runLeadWorker: [Company!]!
+
+    # ✅ NEW: Update full company details
+    updateCompanyDetails(
+      id: ID!, 
+      industry: String, 
+      sizeBand: String, 
+      geography: String, 
+      score: Int,
+      status: String
+    ): Company!
+
+    addContact(companyId: ID!, input: ContactInput!): Person!
+    addDeal(companyId: ID!, input: DealInput!): Deal!
+    addActivity(companyId: ID!, input: ActivityInput!): Event!
   }
 `;
 
-type GraphQLContext = {
-  orgId: string;
-  userId?: string | null;
-};
-
-/** -------------------------
- * Resolvers (unchanged)
- * ------------------------*/
 const resolvers = {
   Query: {
-    companies: async (_: unknown, args: { status?: string }, ctx: GraphQLContext) =>
+    companies: async (_: unknown, args: { status?: string }, context: GraphQLContext) =>
       prisma.company.findMany({
         where: {
-          orgId: ctx.orgId,
+          orgId: context.orgId,
           ...(args.status ? { status: args.status as any } : {}),
+        },
+        include: {
+          people: {
+            orderBy: { createdAt: 'desc' }
+          },
+          deals: {
+            orderBy: { createdAt: 'desc' }
+          },
+          events: {
+            orderBy: { at: 'desc' },
+            take: 10
+          }
         },
         orderBy: { updatedAt: "desc" },
       }),
 
-    company: (_: unknown, args: { id: string }, ctx: GraphQLContext) =>
-      prisma.company.findFirst({
-        where: { id: args.id, orgId: ctx.orgId },
-        include: {
-          people: true,
-          deals: true,
-          events: { orderBy: { at: "desc" }, take: 20 },
+    company: async (_: unknown, args: { id: string }, context: GraphQLContext) => {
+      console.log(`🔍 GraphQL: Looking for company ${args.id} in org ${context.orgId}`);
+      
+      const company = await prisma.company.findFirst({
+        where: { 
+          id: args.id,
+          orgId: context.orgId 
         },
-      }),
+        include: {
+          people: {
+            orderBy: { createdAt: 'desc' }
+          },
+          deals: {
+            orderBy: { createdAt: 'desc' }
+          },
+          events: {
+            orderBy: { at: 'desc' },
+            take: 10
+          }
+        }
+      });
+
+      console.log(`🎯 GraphQL: Company found:`, company ? 'YES' : 'NO');
+      
+      if (!company) {
+        throw new Error(`Company with id ${args.id} not found in organization ${context.orgId}`);
+      }
+
+      return company;
+    },
+
+    runLeadWorker: async (_: unknown, _args: any, context: GraphQLContext) => {
+      await prisma.org.upsert({
+        where: { id: context.orgId },
+        update: {},
+        create: { id: context.orgId, name: "Demo Organization" },
+      });
+
+      const demo = [
+        { name: "Acme FinTech", domain: "acme.example", industry: "FinTech", sizeBand: "51-200", geography: "UK", score: 70 },
+        { name: "Northwind AI", domain: "northwind.example", industry: "AI Consulting", sizeBand: "11-50", geography: "UK", score: 65 },
+        { name: "CloudSync Solutions", domain: "cloudsync.example", industry: "Cloud Computing", sizeBand: "201-500", geography: "United States", score: 75 },
+        { name: "DataVault Analytics", domain: "datavault.example", industry: "Data Analytics", sizeBand: "51-200", geography: "Germany", score: 80 },
+        { name: "NeuroTech Innovations", domain: "neurotech.example", industry: "Artificial Intelligence", sizeBand: "1001+", geography: "United States", score: 85 },
+        { name: "HealthPulse Digital", domain: "healthpulse.example", industry: "Healthcare Tech", sizeBand: "201-500", geography: "Canada", score: 72 },
+      ];
+
+      const created: any[] = [];
+      for (const c of demo) {
+        const company = await prisma.company.upsert({
+          where: { orgId_domain: { orgId: context.orgId, domain: c.domain } },
+          update: c,
+          create: { ...c, orgId: context.orgId, status: "NEW" },
+        });
+        created.push(company);
+      }
+      return created;
+    },
   },
 
   Mutation: {
@@ -193,11 +266,56 @@ const resolvers = {
       });
     },
 
-    updateCompanyStatus: (_: unknown, { id, status }: any) =>
-      prisma.company.update({ where: { id }, data: { status } }),
+    updateCompanyStatus: async (_: unknown, args: { id: string; status: string }, context: GraphQLContext) => {
+      const updatedCompany = await prisma.company.update({
+        where: { id: args.id },
+        data: { status: args.status },
+        include: {
+          people: true,
+          deals: true,
+          events: true,
+        }
+      });
 
-    deleteCompany: async (_: unknown, { id }: any) => {
-      await prisma.company.delete({ where: { id } });
+      return updatedCompany;
+    },
+
+    // ✅ NEW: Update full company details
+    updateCompanyDetails: async (_: unknown, args: { 
+      id: string; 
+      industry?: string; 
+      sizeBand?: string; 
+      geography?: string; 
+      score?: number;
+      status?: string;
+    }, context: GraphQLContext) => {
+      const updateData: any = { updatedAt: new Date() };
+      
+      if (args.industry !== undefined) updateData.industry = args.industry;
+      if (args.sizeBand !== undefined) updateData.sizeBand = args.sizeBand;
+      if (args.geography !== undefined) updateData.geography = args.geography;
+      if (args.score !== undefined) updateData.score = args.score;
+      if (args.status !== undefined) updateData.status = args.status;
+
+      return prisma.company.update({
+        where: { id: args.id, orgId: context.orgId },
+        data: updateData,
+        include: {
+          people: { orderBy: { createdAt: 'desc' } },
+          deals: { orderBy: { createdAt: 'desc' } },
+          events: { orderBy: { at: 'desc' }, take: 10 }
+        }
+      });
+    },
+
+    deleteCompany: async (_: unknown, { id }: any, ctx: GraphQLContext) => {
+      if (!ctx.userId) throw new Error("Authentication required");
+      await prisma.company.delete({ 
+        where: { 
+          id,
+          orgId: ctx.orgId 
+        } 
+      });
       return true;
     },
 
@@ -278,70 +396,86 @@ const resolvers = {
           name: input.name,
           fromName: input.fromName,
           fromEmail: input.fromEmail,
-          // NOTE: keep as string if your Prisma field is String
-          // If your Prisma field is Json, convert to JSON object
           steps: input.steps,
         },
       });
     },
 
-    runLeadWorker: async (_: unknown, _args: any, ctx: GraphQLContext) => {
-      await prisma.org.upsert({
-        where: { id: ctx.orgId },
-        update: {},
-        create: { id: ctx.orgId, name: "Demo Organization" },
+    runLeadWorker: async (_: unknown, _args: any, context: GraphQLContext) => {
+      // Delegate to the Query resolver
+      return resolvers.Query.runLeadWorker(_, _args, context);
+    },
+
+    addContact: async (_: unknown, args: { companyId: string; input: any }, context: GraphQLContext) => {
+      return prisma.person.create({
+        data: {
+          ...args.input,
+          companyId: args.companyId,
+          orgId: context.orgId,
+        }
       });
+    },
 
-      const demo = [
-        { name: "Acme FinTech", domain: "acme.example", industry: "FinTech", sizeBand: "51-200", geography: "UK", score: 70 },
-        { name: "Northwind AI", domain: "northwind.example", industry: "AI Consulting", sizeBand: "11-50", geography: "UK", score: 65 },
-        { name: "CloudSync Solutions", domain: "cloudsync.example", industry: "Cloud Computing", sizeBand: "201-500", geography: "United States", score: 75 },
-        { name: "DataVault Analytics", domain: "datavault.example", industry: "Data Analytics", sizeBand: "51-200", geography: "Germany", score: 80 },
-        { name: "NeuroTech Innovations", domain: "neurotech.example", industry: "Artificial Intelligence", sizeBand: "1001+", geography: "United States", score: 85 },
-        { name: "HealthPulse Digital", domain: "healthpulse.example", industry: "Healthcare Tech", sizeBand: "201-500", geography: "Canada", score: 72 },
-      ];
-
-      const created: any[] = [];
-      for (const c of demo) {
-        const company = await prisma.company.upsert({
-          where: { orgId_domain: { orgId: ctx.orgId, domain: c.domain } },
-          update: c,
-          create: { ...c, orgId: ctx.orgId, status: "NEW" },
-        });
-        created.push(company);
-      }
-      return created;
+    addDeal: async (_: unknown, args: { companyId: string; input: any }, context: GraphQLContext) => {
+      return prisma.deal.create({
+        data: {
+          name: args.input.name,
+          value: args.input.value,
+          stage: args.input.stage,
+          expectedCloseDate: args.input.expectedCloseDate ? new Date(args.input.expectedCloseDate) : null,
+          description: args.input.description,
+          companyId: args.companyId,
+          orgId: context.orgId,
+        }
+      });
+    },
+    
+    addActivity: async (_: unknown, args: { companyId: string; input: any }, context: GraphQLContext) => {
+      return prisma.event.create({
+        data: {
+          ...args.input,
+          companyId: args.companyId,
+          orgId: context.orgId,
+          at: new Date(args.input.at),
+        }
+      });
     },
   },
 };
 
-/** -------------------------
- * Yoga server
- * ------------------------*/
+// Create GraphQL Yoga server
 const yoga = createYoga<GraphQLContext>({
-  schema: createSchema<GraphQLContext>({ typeDefs, resolvers }),
+  schema: createSchema<GraphQLContext>({ 
+    typeDefs, 
+    resolvers 
+  }),
   graphqlEndpoint: "/api/graphql",
-  // Use Next's fetch/Request/Response
   fetchAPI: { Request, Response, fetch },
   context: async () => {
     try {
       const { userId, orgId } = await auth();
-      return { orgId: orgId ?? "demo-org", userId };
+      return { 
+        orgId: orgId ?? "demo-org", 
+        userId: userId ?? null 
+      };
     } catch {
-      return { orgId: "demo-org", userId: null };
+      return { 
+        orgId: "demo-org", 
+        userId: null 
+      };
     }
   },
 });
 
-// ✅ Next 16 route handler signatures (note the second arg with params Promise)
-export async function GET(req: NextRequest, _ctx: { params: Promise<Record<string, string>> }) {
+// Export route handlers
+export async function GET(req: NextRequest) {
   return yoga.fetch(req as unknown as Request);
 }
 
-export async function POST(req: NextRequest, _ctx: { params: Promise<Record<string, string>> }) {
+export async function POST(req: NextRequest) {
   return yoga.fetch(req as unknown as Request);
 }
 
-export async function OPTIONS(req: NextRequest, _ctx: { params: Promise<Record<string, string>> }) {
+export async function OPTIONS(req: NextRequest) {
   return yoga.fetch(req as unknown as Request);
 }

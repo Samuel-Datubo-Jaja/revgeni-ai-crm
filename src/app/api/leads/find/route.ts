@@ -2,6 +2,7 @@ import { findLeadsStructured } from "@/lib/agents/lead-agent";
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { traceOperation } from "@/lib/langfuse-helpers"; // ← Add this
 
 // Zod schema for request validation
 const LeadSearchSchema = z.object({
@@ -49,8 +50,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Call lead agent to find leads using Exa API
-    const leads = await findLeadsStructured(industry || undefined, geography || undefined, size || undefined);
+    // Langfuse Wrapping
+    const leads = await traceOperation(
+      {
+        name: 'lead-finder',
+        userId,
+        input: { industry, geography, size },
+        metadata: { apiVersion: 'v1' },
+      },
+      () => findLeadsStructured(industry || undefined, geography || undefined, size || undefined)
+    );
 
     return NextResponse.json({
       success: true,
