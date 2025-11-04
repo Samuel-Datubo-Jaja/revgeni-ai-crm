@@ -18,6 +18,17 @@ interface DealFormData {
   description: string;
 }
 
+interface GraphQLVariables {
+  companyId?: string;
+  input?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+interface GraphQLResponse {
+  data?: Record<string, unknown>;
+  errors?: Array<{ message: string }>;
+}
+
 // ✅ CORRECT: companyId as SEPARATE argument (matches your resolver)
 const ADD_DEAL_MUTATION = `
   mutation AddDeal($companyId: ID!, $input: DealInput!) {
@@ -27,7 +38,7 @@ const ADD_DEAL_MUTATION = `
   }
 `;
 
-async function graphqlFetch(query: string, variables: any = {}) {
+async function graphqlFetch(query: string, variables: GraphQLVariables = {}) {
   const response = await fetch('/api/graphql', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -39,7 +50,7 @@ async function graphqlFetch(query: string, variables: any = {}) {
     throw new Error(`HTTP Error: ${response.status} - ${errorText}`);
   }
 
-  const result = await response.json();
+  const result: GraphQLResponse = await response.json();
   if (result.errors) {
     throw new Error(result.errors[0]?.message || 'GraphQL Error');
   }
@@ -82,7 +93,7 @@ export default function AddDealModal({ companyId, companyName, onClose }: AddDea
       // ✅ CORRECT: Pass companyId and input as SEPARATE variables
       return graphqlFetch(ADD_DEAL_MUTATION, { 
         companyId,           // ← Separate variable
-        input: processedData // ← Input object WITHOUT companyId
+        input: processedData as Record<string, unknown> // ← Cast to proper type
       });
     },
     onSuccess: () => {
@@ -110,7 +121,7 @@ export default function AddDealModal({ companyId, companyName, onClose }: AddDea
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (validateForm()) {
       addDealMutation.mutate(formData);
@@ -140,7 +151,7 @@ export default function AddDealModal({ companyId, companyName, onClose }: AddDea
     >
       <div 
         className="bg-white rounded-2xl shadow-xl w-full max-w-2xl"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-green-50 to-green-100">
@@ -212,7 +223,7 @@ export default function AddDealModal({ companyId, companyName, onClose }: AddDea
                   <Target size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 z-10" />
                   <select
                     value={formData.stage}
-                    onChange={(e) => updateFormData('stage', e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateFormData('stage', e.target.value)}
                     className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 appearance-none bg-white"
                   >
                     {DEAL_STAGES.map(stage => (

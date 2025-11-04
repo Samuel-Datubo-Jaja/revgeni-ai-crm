@@ -3,7 +3,6 @@ import { createYoga } from "graphql-yoga";
 import { createSchema } from "graphql-yoga";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
- 
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +11,73 @@ export const dynamic = "force-dynamic";
 interface GraphQLContext {
   userId: string | null;
   orgId: string;
+}
+
+// Input types
+interface CompanyInputType {
+  name: string;
+  domain?: string;
+  industry?: string;
+  sizeBand?: string;
+  geography?: string;
+  score?: number;
+}
+
+interface PersonInputType {
+  companyId: string;
+  fullName: string;
+  title?: string;
+  email?: string;
+  linkedin?: string;
+}
+
+interface EventInputType {
+  companyId?: string;
+  personId?: string;
+  dealId?: string;
+  type: string;
+  summary?: string;
+  body?: string;
+}
+
+interface DealInputType {
+  companyId: string;
+  name: string;
+  value?: number;
+  stage: string;
+  expectedCloseDate?: string;
+  description?: string;
+}
+
+interface EmailSequenceInputType {
+  name: string;
+  fromName: string;
+  fromEmail: string;
+  steps: string;
+}
+
+interface ContactInputType {
+  fullName: string;
+  title?: string;
+  email?: string;
+  phone?: string;
+  linkedin?: string;
+}
+
+interface ActivityInputType {
+  type: string;
+  summary: string;
+  body?: string;
+  at: string;
+}
+
+interface DemoCompanyType {
+  name: string;
+  domain: string;
+  industry: string;
+  sizeBand: string;
+  geography: string;
+  score: number;
 }
 
 const typeDefs = `
@@ -170,7 +236,11 @@ const typeDefs = `
 
 const resolvers = {
   Query: {
-    companies: async (_: unknown, args: { status?: string }, context: GraphQLContext) =>
+    companies: async (
+      _: unknown,
+      args: { status?: string },
+      context: GraphQLContext
+    ) =>
       prisma.company.findMany({
         where: {
           orgId: context.orgId,
@@ -191,7 +261,11 @@ const resolvers = {
         orderBy: { updatedAt: "desc" },
       }),
 
-    company: async (_: unknown, args: { id: string }, context: GraphQLContext) => {
+    company: async (
+      _: unknown,
+      args: { id: string },
+      context: GraphQLContext
+    ) => {
       console.log(`🔍 GraphQL: Looking for company ${args.id} in org ${context.orgId}`);
       
       const company = await prisma.company.findFirst({
@@ -222,14 +296,18 @@ const resolvers = {
       return company;
     },
 
-    runLeadWorker: async (_: unknown, _args: any, context: GraphQLContext) => {
+    runLeadWorker: async (
+      _: unknown,
+      _args: Record<string, unknown>,
+      context: GraphQLContext
+    ) => {
       await prisma.org.upsert({
         where: { id: context.orgId },
         update: {},
         create: { id: context.orgId, name: "Demo Organization" },
       });
 
-      const demo = [
+      const demo: DemoCompanyType[] = [
         { name: "Acme FinTech", domain: "acme.example", industry: "FinTech", sizeBand: "51-200", geography: "UK", score: 70 },
         { name: "Northwind AI", domain: "northwind.example", industry: "AI Consulting", sizeBand: "11-50", geography: "UK", score: 65 },
         { name: "CloudSync Solutions", domain: "cloudsync.example", industry: "Cloud Computing", sizeBand: "201-500", geography: "United States", score: 75 },
@@ -238,7 +316,7 @@ const resolvers = {
         { name: "HealthPulse Digital", domain: "healthpulse.example", industry: "Healthcare Tech", sizeBand: "201-500", geography: "Canada", score: 72 },
       ];
 
-      const created: any[] = [];
+      const created = [];
       for (const c of demo) {
         const company = await prisma.company.upsert({
           where: { orgId_domain: { orgId: context.orgId, domain: c.domain } },
@@ -252,7 +330,11 @@ const resolvers = {
   },
 
   Mutation: {
-    upsertCompany: async (_: unknown, { input }: any, ctx: GraphQLContext) => {
+    upsertCompany: async (
+      _: unknown,
+      { input }: { input: CompanyInputType },
+      ctx: GraphQLContext
+    ) => {
       if (!ctx.userId) throw new Error("Authentication required");
 
       if (input.domain) {
@@ -267,10 +349,20 @@ const resolvers = {
       });
     },
 
-    updateCompanyStatus: async (_: unknown, args: { id: string; status: string }, context: GraphQLContext) => {
+    updateCompanyStatus: async (
+      _: unknown,
+      args: { id: string; status: string },
+      context: GraphQLContext
+    ) => {
+      const validStatuses = ['NEW', 'QUALIFIED', 'CONTACTED', 'MEETING', 'PROPOSAL', 'WON', 'LOST'];
+      
+      if (!validStatuses.includes(args.status)) {
+        throw new Error(`Invalid status: ${args.status}`);
+      }
+
       const updatedCompany = await prisma.company.update({
         where: { id: args.id },
-        data: { status: args.status},
+        data: { status: args.status as 'NEW' | 'QUALIFIED' | 'CONTACTED' | 'MEETING' | 'PROPOSAL' | 'WON' | 'LOST' },
         include: {
           people: true,
           deals: true,
@@ -281,22 +373,31 @@ const resolvers = {
       return updatedCompany;
     },
 
-    // ✅ NEW: Update full company details
-    updateCompanyDetails: async (_: unknown, args: { 
-      id: string; 
-      industry?: string; 
-      sizeBand?: string; 
-      geography?: string; 
-      score?: number;
-      status?: string;
-    }, context: GraphQLContext) => {
-      const updateData: any = { updatedAt: new Date() };
+    updateCompanyDetails: async (
+      _: unknown,
+      args: { 
+        id: string; 
+        industry?: string; 
+        sizeBand?: string; 
+        geography?: string; 
+        score?: number;
+        status?: string;
+      },
+      context: GraphQLContext
+    ) => {
+      const updateData: Record<string, unknown> = { updatedAt: new Date() };
       
       if (args.industry !== undefined) updateData.industry = args.industry;
       if (args.sizeBand !== undefined) updateData.sizeBand = args.sizeBand;
       if (args.geography !== undefined) updateData.geography = args.geography;
       if (args.score !== undefined) updateData.score = args.score;
-      if (args.status !== undefined) updateData.status = args.status;
+      if (args.status !== undefined) {
+        const validStatuses = ['NEW', 'QUALIFIED', 'CONTACTED', 'MEETING', 'PROPOSAL', 'WON', 'LOST'];
+        if (!validStatuses.includes(args.status)) {
+          throw new Error(`Invalid status: ${args.status}`);
+        }
+        updateData.status = args.status;
+      }
 
       return prisma.company.update({
         where: { id: args.id, orgId: context.orgId },
@@ -309,7 +410,11 @@ const resolvers = {
       });
     },
 
-    deleteCompany: async (_: unknown, { id }: any, ctx: GraphQLContext) => {
+    deleteCompany: async (
+      _: unknown,
+      { id }: { id: string },
+      ctx: GraphQLContext
+    ) => {
       if (!ctx.userId) throw new Error("Authentication required");
       await prisma.company.delete({ 
         where: { 
@@ -320,7 +425,11 @@ const resolvers = {
       return true;
     },
 
-    bulkCreateCompanies: async (_: unknown, { companies }: any, ctx: GraphQLContext) => {
+    bulkCreateCompanies: async (
+      _: unknown,
+      { companies }: { companies: CompanyInputType[] },
+      ctx: GraphQLContext
+    ) => {
       if (!ctx.userId) throw new Error("Authentication required");
 
       await prisma.org.upsert({
@@ -330,12 +439,12 @@ const resolvers = {
       });
 
       const result = await prisma.company.createMany({
-        data: companies.map((c: any) => ({
+        data: companies.map((c) => ({
           orgId: ctx.orgId,
           name: c.name,
           domain: c.domain,
           industry: c.industry,
-          sizeBand: c.sizeBand || c.size,
+          sizeBand: c.sizeBand || undefined,
           geography: c.geography,
           score: c.score || 50,
           status: "NEW",
@@ -346,7 +455,11 @@ const resolvers = {
       return { count: result.count };
     },
 
-    createPerson: async (_: unknown, { input }: any, ctx: GraphQLContext) => {
+    createPerson: async (
+      _: unknown,
+      { input }: { input: PersonInputType },
+      ctx: GraphQLContext
+    ) => {
       if (!ctx.userId) throw new Error("Authentication required");
       return prisma.person.create({
         data: {
@@ -360,7 +473,11 @@ const resolvers = {
       });
     },
 
-    createEvent: async (_: unknown, { input }: any, ctx: GraphQLContext) => {
+    createEvent: async (
+      _: unknown,
+      { input }: { input: EventInputType },
+      ctx: GraphQLContext
+    ) => {
       if (!ctx.userId) throw new Error("Authentication required");
       return prisma.event.create({
         data: {
@@ -376,7 +493,11 @@ const resolvers = {
       });
     },
 
-    createDeal: async (_: unknown, { input }: any, ctx: GraphQLContext) => {
+    createDeal: async (
+      _: unknown,
+      { input }: { input: DealInputType },
+      ctx: GraphQLContext
+    ) => {
       if (!ctx.userId) throw new Error("Authentication required");
       return prisma.deal.create({
         data: {
@@ -389,7 +510,11 @@ const resolvers = {
       });
     },
 
-    createEmailSequence: async (_: unknown, { input }: any, ctx: GraphQLContext) => {
+    createEmailSequence: async (
+      _: unknown,
+      { input }: { input: EmailSequenceInputType },
+      ctx: GraphQLContext
+    ) => {
       if (!ctx.userId) throw new Error("Authentication required");
       return prisma.emailSequence.create({
         data: {
@@ -402,12 +527,20 @@ const resolvers = {
       });
     },
 
-    runLeadWorker: async (_: unknown, _args: any, context: GraphQLContext) => {
+    runLeadWorker: async (
+      _: unknown,
+      _args: Record<string, unknown>,
+      context: GraphQLContext
+    ) => {
       // Delegate to the Query resolver
       return resolvers.Query.runLeadWorker(_, _args, context);
     },
 
-    addContact: async (_: unknown, args: { companyId: string; input: any }, context: GraphQLContext) => {
+    addContact: async (
+      _: unknown,
+      args: { companyId: string; input: ContactInputType },
+      context: GraphQLContext
+    ) => {
       return prisma.person.create({
         data: {
           ...args.input,
@@ -417,7 +550,11 @@ const resolvers = {
       });
     },
 
-    addDeal: async (_: unknown, args: { companyId: string; input: any }, context: GraphQLContext) => {
+    addDeal: async (
+      _: unknown,
+      args: { companyId: string; input: DealInputType },
+      context: GraphQLContext
+    ) => {
       return prisma.deal.create({
         data: {
           name: args.input.name,
@@ -431,7 +568,11 @@ const resolvers = {
       });
     },
     
-    addActivity: async (_: unknown, args: { companyId: string; input: any }, context: GraphQLContext) => {
+    addActivity: async (
+      _: unknown,
+      args: { companyId: string; input: ActivityInputType },
+      context: GraphQLContext
+    ) => {
       return prisma.event.create({
         data: {
           ...args.input,

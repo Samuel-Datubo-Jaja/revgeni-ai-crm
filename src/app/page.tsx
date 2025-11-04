@@ -2,11 +2,11 @@
 
 import { useAuth, useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useEffect } from 'react';
 import { 
   ArrowRight, 
   BarChart3, 
-  Users, 
   Mail, 
   Zap,
   Sparkles 
@@ -38,27 +38,27 @@ export default function Home() {
             </div>
             <div className="flex gap-3">
               {isSignedIn ? (
-                <a
+                <Link
                   href="/pipeline"
                   className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium flex items-center gap-2"
                 >
                   Go to Dashboard
                   <ArrowRight size={16} />
-                </a>
+                </Link>
               ) : (
                 <>
-                  <a
+                  <Link
                     href="/sign-in"
                     className="px-4 py-2 text-gray-700 hover:text-gray-900 transition font-medium"
                   >
                     Sign In
-                  </a>
-                  <a
+                  </Link>
+                  <Link
                     href="/sign-up"
                     className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium"
                   >
                     Get Started
-                  </a>
+                  </Link>
                 </>
               )}
             </div>
@@ -95,20 +95,20 @@ export default function Home() {
 
           {/* CTA Buttons */}
           <div className="flex gap-4 justify-center mb-16">
-            <a
+            <Link
               href="/pipeline"
               className="group px-8 py-4 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-semibold flex items-center gap-2 shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300"
             >
               Open Pipeline
               <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
-            </a>
+            </Link>
             {!isSignedIn && (
-              <a
+              <Link
                 href="/sign-up"
                 className="px-8 py-4 bg-white text-gray-900 rounded-xl hover:bg-gray-50 transition font-semibold border-2 border-gray-200 hover:border-gray-300"
               >
                 Start Free Trial
-              </a>
+              </Link>
             )}
           </div>
 

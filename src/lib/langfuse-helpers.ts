@@ -1,16 +1,12 @@
 import { langfuse } from './langfuse';
 
-interface TraceOptions {
+type MetadataRecord = Record<string, string | number | boolean | null | undefined>;
+
+interface TraceOptions<TInput = unknown> {
   name: string;
   userId?: string;
-  input?: any;
-  metadata?: Record<string, any>;
-}
-
-interface TraceResult {
-  output?: any;
-  metadata?: Record<string, any>;
-  error?: Error;
+  input?: TInput;
+  metadata?: MetadataRecord;
 }
 
 /**
@@ -18,7 +14,7 @@ interface TraceResult {
  * Automatically handles success/error and flushing
  */
 export async function traceOperation<T>(
-  options: TraceOptions,
+  options: TraceOptions<unknown>,
   operation: () => Promise<T>
 ): Promise<T> {
   const trace = langfuse.trace({
@@ -48,17 +44,30 @@ export async function traceOperation<T>(
     return result;
 
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+
     trace.update({
-      level: 'ERROR',
-      statusMessage: error instanceof Error ? error.message : 'Unknown error',
       metadata: {
         duration: Date.now() - startTime,
         status: 'error',
-        error: error instanceof Error ? error.stack : String(error),
+        level: 'ERROR',
+        errorMessage: errorMessage,
+        error: errorStack || errorMessage,
       },
     });
 
     await langfuse.flushAsync();
     throw error;
   }
+}
+
+/**
+ * Type-safe wrapper for traced operations with generic input/output types
+ */
+export async function traceOperationTyped<TInput, TOutput>(
+  options: TraceOptions<TInput>,
+  operation: () => Promise<TOutput>
+): Promise<TOutput> {
+  return traceOperation(options, operation);
 }

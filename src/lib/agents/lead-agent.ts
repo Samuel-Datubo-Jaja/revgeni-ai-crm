@@ -15,13 +15,45 @@ export interface LeadSearchResult {
   score: number;
   url?: string;
   reasoning?: string;
-  phone?: string; // ✅ Added phone number
+  phone?: string;
   contactInfo?: {
     mainPhone?: string;
     salesPhone?: string;
     supportPhone?: string;
     headquarters?: string;
   };
+}
+
+interface RawSearchResult {
+  title: string;
+  url: string;
+  text?: string;
+}
+
+interface CompanyForAnalysis {
+  title: string;
+  url: string;
+  text?: string;
+}
+
+interface AIGenerateResponse {
+  text: string;
+}
+
+interface AILeadResponse {
+  leads: LeadSearchResult[];
+}
+
+interface SearchFilters {
+  industry?: string;
+  geography?: string;
+  size?: "startup" | "mid" | "enterprise";
+}
+
+interface SizeMap {
+  startup: string;
+  mid: string;
+  enterprise: string;
 }
 
 /**
@@ -67,16 +99,16 @@ async function searchCompaniesWithExa(
   industry?: string,
   geography?: string,
   size?: "startup" | "mid" | "enterprise"
-): Promise<Array<any>> {
+): Promise<RawSearchResult[]> {
   // Build enhanced search queries
-  const queries = [];
+  const queries: string[] = [];
   
   // Primary query
-  const queryParts = [];
+  const queryParts: string[] = [];
   if (industry) queryParts.push(`${industry} companies`);
   if (geography) queryParts.push(`based in ${geography}`);
   if (size) {
-    const sizeMap = {
+    const sizeMap: SizeMap = {
       startup: "startup (1-50 employees)",
       mid: "mid-market (50-1000 employees)",
       enterprise: "enterprise (1000+ employees)",
@@ -99,7 +131,7 @@ async function searchCompaniesWithExa(
   console.log(`🔍 Enhanced queries: ${queries.join(' | ')}`);
 
   // Search with multiple queries for better contact info
-  const allResults: any[] = [];
+  const allResults: RawSearchResult[] = [];
   
   for (const query of queries.slice(0, 2)) { // Limit to 2 queries to avoid rate limits
     try {
@@ -107,20 +139,26 @@ async function searchCompaniesWithExa(
         numResults: 15,
         text: true,
         livecrawl: "never",
-        includeDomains: [], // Could add specific domains if needed
-        excludeDomains: ["linkedin.com", "facebook.com", "twitter.com"], // Focus on company websites
+        includeDomains: [],
+        excludeDomains: ["linkedin.com", "facebook.com", "twitter.com"],
       });
       
-      allResults.push(...results.results);
+      const mappedResults: RawSearchResult[] = results.results.map((result: Record<string, unknown>) => ({
+        title: String(result.title || ""),
+        url: String(result.url || ""),
+        text: result.text ? String(result.text) : undefined,
+      }));
+      
+      allResults.push(...mappedResults);
     } catch (error) {
       console.warn(`Query failed: ${query}`, error);
     }
   }
 
   // Deduplicate by domain
-  const uniqueResults = allResults.reduce((acc, result) => {
+  const uniqueResults = allResults.reduce((acc: RawSearchResult[], result: RawSearchResult) => {
     const domain = new URL(result.url).hostname;
-    if (!acc.find((r: any) => new URL(r.url).hostname === domain)) {
+    if (!acc.find((r: RawSearchResult) => new URL(r.url).hostname === domain)) {
       acc.push(result);
     }
     return acc;
@@ -133,18 +171,14 @@ async function searchCompaniesWithExa(
  * Enhanced AI analysis with phone number and contact extraction
  */
 async function analyzeLeadsWithContactInfo(
-  rawResults: any[],
-  filters: {
-    industry?: string;
-    geography?: string;
-    size?: "startup" | "mid" | "enterprise";
-  }
+  rawResults: RawSearchResult[],
+  filters: SearchFilters
 ): Promise<LeadSearchResult[]> {
   // Format results for AI analysis
-  const companiesJson = rawResults.map((result) => ({
+  const companiesJson: CompanyForAnalysis[] = rawResults.map((result: RawSearchResult) => ({
     title: result.title,
     url: result.url,
-    text: result.text?.substring(0, 1000), // Increased for better contact extraction
+    text: result.text?.substring(0, 1000),
   }));
 
   // Enhanced prompt for contact information extraction
@@ -208,28 +242,30 @@ IMPORTANT:
 
   try {
     // Call OpenAI with enhanced prompt
-    const { text } = await generateText({
+    const response = await generateText({
       model: openai("gpt-4o"),
       prompt,
-      temperature: 0.3, // Lower temperature for better extraction accuracy
-      maxOutputTokens: 3000, // Increased for contact info
+      temperature: 0.3,
+      maxOutputTokens: 3000,
     });
 
+    const generateResponse = response as AIGenerateResponse;
+
     // Parse AI response
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const jsonMatch = generateResponse.text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error("Failed to parse AI response");
     }
 
-    const parsedResponse = JSON.parse(jsonMatch[0]);
+    const parsedResponse: AILeadResponse = JSON.parse(jsonMatch[0]);
     const leads: LeadSearchResult[] = parsedResponse.leads
-      .filter((lead: any) => lead.name && lead.domain)
-      .map((lead: any) => ({
+      .filter((lead: LeadSearchResult) => lead.name && lead.domain)
+      .map((lead: LeadSearchResult) => ({
         ...lead,
         // Ensure phone is at top level for backward compatibility
         phone: lead.phone || lead.contactInfo?.mainPhone || lead.contactInfo?.salesPhone,
       }))
-      .sort((a: any, b: any) => b.score - a.score)
+      .sort((a: LeadSearchResult, b: LeadSearchResult) => b.score - a.score)
       .slice(0, 15);
 
     // Log contact info success rate

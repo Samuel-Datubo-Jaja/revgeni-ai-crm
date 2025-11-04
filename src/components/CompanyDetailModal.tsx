@@ -90,6 +90,17 @@ interface EditData {
   geography?: string;
 }
 
+interface GraphQLVariables {
+  id?: string;
+  status?: string;
+  [key: string]: unknown;
+}
+
+interface GraphQLResponse {
+  data?: { company?: Company };
+  errors?: Array<{ message: string }>;
+}
+
 // Update company mutation
 const UPDATE_COMPANY_MUTATION = `
   mutation UpdateCompany($id: ID!, $status: String!) {
@@ -110,7 +121,7 @@ const COMPANY_DETAIL_QUERY = `
   }
 `;
 
-async function graphqlFetch(query: string, variables: any = {}) {
+async function graphqlFetch(query: string, variables: GraphQLVariables = {}) {
   const response = await fetch('/api/graphql', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -122,7 +133,7 @@ async function graphqlFetch(query: string, variables: any = {}) {
     throw new Error(`HTTP Error: ${response.status} - ${errorText}`);
   }
 
-  const result = await response.json();
+  const result: GraphQLResponse = await response.json();
   if (result.errors) {
     throw new Error(result.errors[0]?.message || 'GraphQL Error');
   }
@@ -194,7 +205,7 @@ export default function CompanyDetailModal({ companyId, onClose }: CompanyDetail
     >
       <div 
         className="bg-white rounded-2xl shadow-xl w-full max-w-7xl h-[90vh] flex flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}
       >
         {/* Header - Fixed at top */}
         <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-green-50 via-blue-50 to-purple-50 flex-shrink-0">
@@ -457,7 +468,7 @@ export default function CompanyDetailModal({ companyId, onClose }: CompanyDetail
 function ErrorView({ error, onClose, companyId }: { error: Error; onClose: () => void; companyId: string }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl p-6" onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-red-600">Failed to load company</h2>
           <button onClick={onClose} className="p-2 rounded hover:bg-gray-100">
@@ -495,7 +506,7 @@ function LoadingView({ companyId }: { companyId: string }) {
 function NotFoundView({ companyId, onClose }: { companyId: string; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl p-6" onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900">Company not found</h2>
           <button onClick={onClose} className="p-2 rounded hover:bg-gray-100">
@@ -524,7 +535,7 @@ function EditableField({ label, value, editValue, isEditing, onChange, placehold
         <input
           type="text"
           value={editValue ?? value ?? ''}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
           placeholder={placeholder}
           className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         />
@@ -551,7 +562,7 @@ function EditableSelectField({ label, value, editValue, isEditing, onChange, opt
       {isEditing ? (
         <select
           value={currentValue ?? ''}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onChange(e.target.value)}
           className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         >
           <option value="">Select...</option>
@@ -582,7 +593,7 @@ function EditableScoreField({ label, value, editValue, isEditing, onChange }: Ed
           min="0"
           max="100"
           value={editValue ?? value ?? 0}
-          onChange={(e) => onChange(parseInt(e.target.value) || 0)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(parseInt(e.target.value) || 0)}
           className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         />
       ) : (

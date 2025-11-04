@@ -1,5 +1,19 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import type { CompanySequence, Company, EmailSequence } from '@prisma/client';
+
+interface EmailData extends CompanySequence {
+  company: Company & {
+    people: Array<{ email?: string | null; fullName?: string | null }>;
+  };
+  sequence: EmailSequence;
+}
+
+interface StepData {
+  subject: string;
+  body: string;
+  delay: number;
+}
 
 export async function GET() {
   try {
@@ -22,7 +36,8 @@ export async function GET() {
         console.log(`✅ Sent email to ${emailData.company.name}`);
       } catch (error) {
         errorCount++;
-        console.error(`❌ Failed to send email to ${emailData.company.name}:`, error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`❌ Failed to send email to ${emailData.company.name}:`, errorMessage);
         
         // Log error to database
         await prisma.outboxEmail.create({
@@ -33,7 +48,7 @@ export async function GET() {
             stepIndex: emailData.currentStep,
             scheduledAt: new Date(),
             status: 'failed',
-            error: error instanceof Error ? error.message : 'Unknown error',
+            error: errorMessage,
           },
         });
       }
@@ -50,10 +65,11 @@ export async function GET() {
     });
     
   } catch (error) {
-    console.error('❌ Cron job error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('❌ Cron job error:', errorMessage);
     return NextResponse.json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: errorMessage,
       timestamp: new Date().toISOString(),
     }, { status: 500 });
   }
@@ -83,17 +99,16 @@ async function findEmailsDueToday() {
         },
       },
       sequence: true,
-      org: true,
     },
-  });
+  }) as EmailData[];
 }
 
 // Helper function: Send the actual email
-async function sendScheduledEmail(emailData: any) {
-  const { company, sequence, currentStep, org } = emailData;
+async function sendScheduledEmail(emailData: EmailData) {
+  const { company, sequence, currentStep } = emailData;
   
   // Parse the sequence steps
-  const steps = JSON.parse(sequence.steps);
+  const steps = JSON.parse(JSON.stringify(sequence.steps)) as StepData[];
   const currentStepData = steps[currentStep];
   
   if (!currentStepData) {
@@ -122,7 +137,7 @@ async function sendScheduledEmail(emailData: any) {
   });
   
   if (!response.ok) {
-    const errorData = await response.json();
+    const errorData = await response.json() as { error?: string };
     throw new Error(errorData.error || 'Failed to send email');
   }
   
@@ -130,11 +145,11 @@ async function sendScheduledEmail(emailData: any) {
 }
 
 // Helper function: Update next send date
-async function updateNextSendDate(emailData: any) {
+async function updateNextSendDate(emailData: EmailData) {
   const { id, sequence, currentStep } = emailData;
   
   // Parse the sequence steps
-  const steps = JSON.parse(sequence.steps);
+  const steps = JSON.parse(JSON.stringify(sequence.steps)) as StepData[];
   const nextStepIndex = currentStep + 1;
   
   if (nextStepIndex >= steps.length) {

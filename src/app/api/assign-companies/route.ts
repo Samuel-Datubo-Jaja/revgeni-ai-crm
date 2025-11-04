@@ -2,6 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
 import { assignCompanyToSequence } from '@/lib/sequence-assignment';
 
+interface AssignmentError {
+  companyId: string;
+  error: string;
+}
+
+interface AssignmentResult {
+  companyId: string;
+  success: boolean;
+  [key: string]: unknown;
+}
+
 export async function POST(request: NextRequest) {
   try {
     // 🔧 Use currentUser() instead of auth()
@@ -64,8 +75,8 @@ export async function POST(request: NextRequest) {
     console.log('   📋 Companies:', companyIds.length);
     console.log('   📧 Sequence:', sequenceId);
 
-    const results = [];
-    const errors = [];
+    const results: AssignmentResult[] = [];
+    const errors: AssignmentError[] = [];
 
     // Process each company assignment
     for (const companyId of companyIds) {
@@ -75,13 +86,18 @@ export async function POST(request: NextRequest) {
           sequenceId,
           orgId
         );
-        results.push(result);
+        results.push({
+          ...result,
+          companyId: result.companyId,
+          success: true
+        });
         console.log(`   ✅ Assigned company ${companyId}`);
-      } catch (error: any) {
-        console.error(`   ❌ Failed to assign ${companyId}:`, error.message);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`   ❌ Failed to assign ${companyId}:`, errorMessage);
         errors.push({
           companyId,
-          error: error.message,
+          error: errorMessage,
         });
       }
     }
@@ -107,10 +123,11 @@ export async function POST(request: NextRequest) {
       errors: errors.length > 0 ? errors : undefined,
     });
 
-  } catch (error: any) {
-    console.error('❌ API Error:', error);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
+    console.error('❌ API Error:', errorMessage);
     return NextResponse.json(
-      { error: error.message || 'Internal server error' },
+      { error: errorMessage },
       { status: 500 }
     );
   }

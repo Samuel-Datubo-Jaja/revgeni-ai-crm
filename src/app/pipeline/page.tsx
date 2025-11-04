@@ -11,7 +11,7 @@ import CompanyCard from "@/components/CompanyCard";
 import EmptyState from "@/components/EmptyState";
 import { LeadFinderModal } from "@/components/LeadFinderModal";
 import { EmailSequenceBuilder } from "@/components/EmailSequenceBuilder";
-import { CompanyAssignmentModal } from '@/components/CompanyAssignmentModal'; // 🆕 ADD THIS
+import { CompanyAssignmentModal } from '@/components/CompanyAssignmentModal';
 import { DashboardCharts } from "@/components/DashboardCharts";
 import toast, { Toaster } from 'react-hot-toast';
 
@@ -79,7 +79,7 @@ export default function PipelinePage() {
   const [search, setSearch] = useState("");
   const [openLeadFinder, setOpenLeadFinder] = useState(false);
   const [openEmailSequence, setOpenEmailSequence] = useState(false);
-  const [openCompanyAssignment, setOpenCompanyAssignment] = useState(false); // 🆕 ADD THIS
+  const [openCompanyAssignment, setOpenCompanyAssignment] = useState(false);
 
   // Redirect to sign-in if not authenticated
   useEffect(() => {
@@ -226,7 +226,11 @@ export default function PipelinePage() {
       {/* Dashboard Charts Section */}
       {data && data.length > 0 && (
         <div className="mb-8">
-          <DashboardCharts companies={data} />
+          <DashboardCharts companies={data.map(company => ({
+            ...company,
+            industry: company.industry ?? null,
+            score: company.score ?? null
+          }))} />
         </div>
       )}
 
@@ -266,8 +270,8 @@ export default function PipelinePage() {
                             <select
                               className="w-full rounded-lg border bg-white px-2 py-1 text-sm hover:border-blue-300 focus:border-blue-500 focus:outline-none"
                               value={c.status}
-                              onClick={(e) => e.stopPropagation()}
-                              onChange={(e) => {
+                              onClick={(e: React.MouseEvent<HTMLSelectElement>) => e.stopPropagation()}
+                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                                 e.stopPropagation();
                                 moveTo(c.id, e.target.value as Company["status"]);
                               }}
@@ -296,7 +300,6 @@ export default function PipelinePage() {
         open={openEmailSequence}
         onOpenChange={setOpenEmailSequence}
       />
-      {/* 🆕 NEW MODAL */}
       <CompanyAssignmentModal
         open={openCompanyAssignment}
         onClose={() => setOpenCompanyAssignment(false)}

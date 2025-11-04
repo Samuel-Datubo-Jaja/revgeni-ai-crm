@@ -18,6 +18,17 @@ interface ContactFormData {
   linkedin: string;
 }
 
+interface GraphQLVariables {
+  companyId?: string;
+  input?: Record<string, unknown> | ContactFormData;
+  [key: string]: unknown;
+}
+
+interface GraphQLResponse {
+  data?: Record<string, unknown>;
+  errors?: Array<{ message: string }>;
+}
+
 const ADD_CONTACT_MUTATION = `
   mutation AddContact($companyId: ID!, $input: ContactInput!) {
     addContact(companyId: $companyId, input: $input) {
@@ -26,7 +37,7 @@ const ADD_CONTACT_MUTATION = `
   }
 `;
 
-async function graphqlFetch(query: string, variables: any = {}) {
+async function graphqlFetch(query: string, variables: GraphQLVariables = {}) {
   const response = await fetch('/api/graphql', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -38,7 +49,7 @@ async function graphqlFetch(query: string, variables: any = {}) {
     throw new Error(`HTTP Error: ${response.status} - ${errorText}`);
   }
 
-  const result = await response.json();
+  const result: GraphQLResponse = await response.json();
   if (result.errors) {
     throw new Error(result.errors[0]?.message || 'GraphQL Error');
   }
@@ -93,7 +104,7 @@ export default function AddContactModal({ companyId, companyName, onClose }: Add
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (validateForm()) {
       addContactMutation.mutate(formData);
@@ -114,7 +125,7 @@ export default function AddContactModal({ companyId, companyName, onClose }: Add
     >
       <div 
         className="bg-white rounded-2xl shadow-xl w-full max-w-2xl"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-blue-50 to-blue-100">

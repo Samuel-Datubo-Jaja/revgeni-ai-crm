@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
         userId = authResult.userId;
         orgId = authResult.orgId;
       }
-    } catch (authError) {
+    } catch {
       console.log('👤 Using demo auth for email testing');
     }
 
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
 
         // Using date utils for better formatting
         const scheduledDate = addDays(new Date(), delayDays);
-        const scheduleMessage = formatEmailDelay(delayDays);
+        const scheduleMsg = formatEmailDelay(delayDays);
 
         // Enhanced response with readable dates:
         return NextResponse.json({
@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
           // Human-readable formats using your utils
           scheduledAtReadable: formatDateReadable(scheduledDate),
           timestampReadable: formatDateReadable(new Date()),
-          scheduleMessage: scheduleMessage,
+          scheduleMessage: scheduleMsg,
         });
 
       } catch (nangoError) {
@@ -155,10 +155,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(mockResponse);
 
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to send email';
     console.error('❌ Email API error:', error);
     
     return NextResponse.json({ 
-      error: error instanceof Error ? error.message : 'Failed to send email',
+      error: errorMessage,
       timestamp: new Date().toISOString()
     }, { status: 500 });
   }

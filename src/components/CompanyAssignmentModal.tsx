@@ -33,35 +33,48 @@ interface EmailSequence {
   }>;
 }
 
+interface GraphQLQueryBody {
+  query: string;
+  variables?: Record<string, unknown>;
+}
+
+interface GraphQLResponse {
+  data?: { companies?: Company[] };
+  errors?: Array<{ message: string }>;
+}
+
 export function CompanyAssignmentModal({ open, onClose }: CompanyAssignmentModalProps) {
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
   const [selectedSequence, setSelectedSequence] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const queryClient = useQueryClient();
-  const { userId } = useAuth(); // 🆕 ADD THIS
+  const { userId } = useAuth();
 
   // Fetch companies
   const { data: companies = [], isLoading: companiesLoading } = useQuery<Company[]>({
     queryKey: ['companies'],
     queryFn: async () => {
+      const body: GraphQLQueryBody = {
+        query: `
+          query GetCompanies {
+            companies {
+              id
+              name
+              domain
+              industry
+              score
+            }
+          }
+        `
+      };
+
       const response = await fetch('/api/graphql', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `
-            query GetCompanies {
-              companies {
-                id
-                name
-                domain
-                industry
-                score
-              }
-            }
-          `
-        }),
+        body: JSON.stringify(body),
       });
-      const result = await response.json();
+      
+      const result: GraphQLResponse = await response.json();
       return result.data?.companies || [];
     },
     enabled: open,
@@ -80,7 +93,7 @@ export function CompanyAssignmentModal({ open, onClose }: CompanyAssignmentModal
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         
-        const sequences = await response.json();
+        const sequences: EmailSequence[] = await response.json();
         console.log('✅ Fetched sequences:', sequences);
         console.log('📊 Count:', sequences.length);
         
@@ -108,7 +121,7 @@ export function CompanyAssignmentModal({ open, onClose }: CompanyAssignmentModal
     company.industry?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // 🔧 FIXED Assignment mutation with proper auth
+  // Assignment mutation with proper auth
   const assignMutation = useMutation({
     mutationFn: async () => {
       console.log('🚀 Starting assignment...');
@@ -136,7 +149,7 @@ export function CompanyAssignmentModal({ open, onClose }: CompanyAssignmentModal
 
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data: Record<string, unknown>) => {
       console.log('✅ Assignment successful:', data);
       
       // Invalidate queries to refresh data
@@ -166,7 +179,7 @@ export function CompanyAssignmentModal({ open, onClose }: CompanyAssignmentModal
     );
   }
 
-  // Handle select all/none - FIXED FUNCTION NAME
+  // Handle select all/none
   const handleSelectAll = () => {
     if (selectedCompanies.length === filteredCompanies.length) {
       setSelectedCompanies([]);
@@ -231,7 +244,7 @@ export function CompanyAssignmentModal({ open, onClose }: CompanyAssignmentModal
                 <input
                   placeholder="Search companies by name, domain, or industry..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                 />
               </div>
@@ -305,7 +318,7 @@ export function CompanyAssignmentModal({ open, onClose }: CompanyAssignmentModal
               <div className="flex items-center gap-2 mb-4">
                 <Mail size={20} className="text-gray-600" />
                 <h4 className="text-lg font-semibold">Choose Email Sequence</h4>
-                {/* 🐛 DEBUG INFO */}
+                {/* Debug info */}
                 <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
                   {sequencesLoading ? 'Loading...' : `${sequences.length} found`}
                 </span>
@@ -344,7 +357,7 @@ export function CompanyAssignmentModal({ open, onClose }: CompanyAssignmentModal
                   
                   <select
                     value={selectedSequence}
-                    onChange={(e) => setSelectedSequence(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedSequence(e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                   >
                     <option value="">Select an email sequence...</option>

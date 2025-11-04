@@ -21,6 +21,8 @@ interface LeadFinderModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
+type CompanySize = "startup" | "mid" | "enterprise" | "";
+
 const BULK_CREATE = gql`
   mutation BulkCreateCompanies($companies: [CompanyInput!]!) {
     bulkCreateCompanies(companies: $companies) {
@@ -33,7 +35,7 @@ export function LeadFinderModal({ open, onOpenChange }: LeadFinderModalProps) {
   const queryClient = useQueryClient();
   const [industry, setIndustry] = useState("");
   const [geography, setGeography] = useState("");
-  const [size, setSize] = useState<"startup" | "mid" | "enterprise" | "">("");
+  const [size, setSize] = useState<CompanySize>("");
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
   const [step, setStep] = useState<"filter" | "results" | "importing" | "success">(
@@ -152,7 +154,7 @@ export function LeadFinderModal({ open, onOpenChange }: LeadFinderModalProps) {
     }
   };
 
-  const getSizeColor = (size: string) => {
+  const getSizeColor = (size: string): string => {
     switch (size) {
       case "startup":
         return "bg-blue-100 text-blue-800";
@@ -165,7 +167,7 @@ export function LeadFinderModal({ open, onOpenChange }: LeadFinderModalProps) {
     }
   };
 
-  const getScoreColor = (score: number) => {
+  const getScoreColor = (score: number): string => {
     if (score >= 80) return "bg-green-100 text-green-800";
     if (score >= 60) return "bg-yellow-100 text-yellow-800";
     return "bg-red-100 text-red-800";
@@ -180,7 +182,7 @@ export function LeadFinderModal({ open, onOpenChange }: LeadFinderModalProps) {
     >
       <div 
         className="bg-white rounded-2xl shadow-xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}
       >
         {/* Header - Modern Design */}
         <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-blue-50 via-purple-50 to-green-50 flex-shrink-0">
@@ -249,7 +251,7 @@ export function LeadFinderModal({ open, onOpenChange }: LeadFinderModalProps) {
                         type="text"
                         placeholder="e.g., Software, Finance, AI, Healthcare"
                         value={industry}
-                        onChange={(e) => setIndustry(e.target.value)}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setIndustry(e.target.value)}
                         className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </div>
@@ -265,7 +267,7 @@ export function LeadFinderModal({ open, onOpenChange }: LeadFinderModalProps) {
                         type="text"
                         placeholder="e.g., United States, United Kingdom, Germany"
                         value={geography}
-                        onChange={(e) => setGeography(e.target.value)}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGeography(e.target.value)}
                         className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </div>
@@ -279,7 +281,7 @@ export function LeadFinderModal({ open, onOpenChange }: LeadFinderModalProps) {
                       <Users size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                       <select
                         value={size}
-                        onChange={(e) => setSize(e.target.value as any)}
+                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSize(e.target.value as CompanySize)}
                         className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none bg-white"
                       >
                         <option value="">Any size</option>

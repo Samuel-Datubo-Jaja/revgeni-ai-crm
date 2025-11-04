@@ -19,6 +19,17 @@ interface ActivityFormData {
   time: string;
 }
 
+interface GraphQLVariables {
+  companyId?: string;
+  input?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+interface GraphQLResponse {
+  data?: Record<string, unknown>;
+  errors?: Array<{ message: string }>;
+}
+
 const ADD_ACTIVITY_MUTATION = `
   mutation AddActivity($companyId: ID!, $input: ActivityInput!) {
     addActivity(companyId: $companyId, input: $input) {
@@ -27,7 +38,7 @@ const ADD_ACTIVITY_MUTATION = `
   }
 `;
 
-async function graphqlFetch(query: string, variables: any = {}) {
+async function graphqlFetch(query: string, variables: GraphQLVariables = {}) {
   const response = await fetch('/api/graphql', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -39,7 +50,7 @@ async function graphqlFetch(query: string, variables: any = {}) {
     throw new Error(`HTTP Error: ${response.status} - ${errorText}`);
   }
 
-  const result = await response.json();
+  const result: GraphQLResponse = await response.json();
   if (result.errors) {
     throw new Error(result.errors[0]?.message || 'GraphQL Error');
   }
@@ -47,7 +58,14 @@ async function graphqlFetch(query: string, variables: any = {}) {
   return result.data;
 }
 
-const ACTIVITY_TYPES = [
+interface ActivityType {
+  value: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  color: string;
+}
+
+const ACTIVITY_TYPES: ActivityType[] = [
   { value: 'call', label: 'Phone Call', icon: Phone, color: 'text-green-600' },
   { value: 'email', label: 'Email', icon: Mail, color: 'text-blue-600' },
   { value: 'meeting', label: 'Meeting', icon: Users, color: 'text-purple-600' },
@@ -111,7 +129,7 @@ export default function AddActivityModal({ companyId, companyName, onClose }: Ad
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (validateForm()) {
       addActivityMutation.mutate(formData);
@@ -134,7 +152,7 @@ export default function AddActivityModal({ companyId, companyName, onClose }: Ad
     >
       <div 
         className="bg-white rounded-2xl shadow-xl w-full max-w-2xl"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-purple-50 to-purple-100">

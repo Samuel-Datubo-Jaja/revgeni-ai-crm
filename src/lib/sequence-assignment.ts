@@ -69,8 +69,8 @@ export async function assignCompanyToSequence(
     
     return assignment;
     
-  } catch (error: any) {
-    console.error('❌ Assignment failed:', error.message);
+  } catch (error) {
+    console.error('❌ Assignment failed:', error instanceof Error ? error.message : String(error));
     throw error;
   }
 }

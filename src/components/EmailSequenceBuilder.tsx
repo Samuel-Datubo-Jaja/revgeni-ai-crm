@@ -18,7 +18,7 @@ import {
   Zap,
   CheckCircle,
   BarChart3,
-  Send // ← ADD THIS IMPORT
+  Send
 } from "lucide-react";
 
 interface EmailStep {
@@ -75,6 +75,16 @@ const CREATE_SEQUENCE = gql`
   }
 `;
 
+interface SendTestEmailParams {
+  email: string;
+  step: EmailStep;
+}
+
+interface TestEmailResponse {
+  success: boolean;
+  [key: string]: unknown;
+}
+
 export function EmailSequenceBuilder({
   open,
   onOpenChange,
@@ -90,7 +100,6 @@ export function EmailSequenceBuilder({
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   
-  // ✅ ADD TEST EMAIL STATE
   const [testEmail, setTestEmail] = useState("");
   const [showTestEmailModal, setShowTestEmailModal] = useState(false);
 
@@ -122,9 +131,8 @@ export function EmailSequenceBuilder({
     },
   });
 
-  // ✅ ADD TEST EMAIL MUTATION
   const sendTestEmailMutation = useMutation({
-    mutationFn: async ({ email, step }: { email: string; step: EmailStep }) => {
+    mutationFn: async ({ email, step }: SendTestEmailParams): Promise<TestEmailResponse> => {
       const response = await fetch('/api/email/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -147,12 +155,11 @@ export function EmailSequenceBuilder({
 
       return response.json();
     },
-    onSuccess: (data) => {
-      console.log('✅ Test email sent:', data);
+    onSuccess: () => {
+      console.log('✅ Test email sent');
       setShowTestEmailModal(false);
       setTestEmail("");
       setError(null);
-      // You could add a toast here if you have toast notifications
     },
     onError: (err) => {
       setError(err instanceof Error ? err.message : "Failed to send test email");
@@ -182,7 +189,7 @@ export function EmailSequenceBuilder({
     }
   };
 
-  const handleUpdateStep = (id: string, field: string, value: any) => {
+  const handleUpdateStep = (id: string, field: string, value: unknown) => {
     setSteps(steps.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
   };
 
@@ -195,7 +202,6 @@ export function EmailSequenceBuilder({
     }
   };
 
-  // ✅ ADD TEST EMAIL HANDLER
   const handleSendTestEmail = () => {
     const currentStep = steps.find(s => s.id === editingStepId);
     if (currentStep && testEmail && currentStep.subject && currentStep.body) {
@@ -225,7 +231,7 @@ export function EmailSequenceBuilder({
       >
         <div 
           className="bg-white rounded-2xl shadow-xl w-full max-w-7xl h-[90vh] flex flex-col overflow-hidden"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}
         >
           {/* Header - Modern Design */}
           <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-purple-50 via-pink-50 to-orange-50 flex-shrink-0">
@@ -290,7 +296,7 @@ export function EmailSequenceBuilder({
                       id="seq-name"
                       placeholder="e.g., Cold Outreach - Enterprise"
                       value={sequenceName}
-                      onChange={(e) => setSequenceName(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSequenceName(e.target.value)}
                       className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                     />
                   </div>
@@ -307,7 +313,7 @@ export function EmailSequenceBuilder({
                       type="email"
                       placeholder="sales@company.com"
                       value={fromEmail}
-                      onChange={(e) => setFromEmail(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFromEmail(e.target.value)}
                       className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                     />
                   </div>
@@ -323,7 +329,7 @@ export function EmailSequenceBuilder({
                       id="from-name"
                       placeholder="Your Name"
                       value={fromName}
-                      onChange={(e) => setFromName(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFromName(e.target.value)}
                       className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                     />
                   </div>
@@ -350,7 +356,6 @@ export function EmailSequenceBuilder({
                     </span>
                   </div>
                   <div className="flex gap-2">
-                    {/* ✅ ADD TEST EMAIL BUTTON */}
                     {editingStep && editingStep.subject && editingStep.body && (
                       <button
                         onClick={() => setShowTestEmailModal(true)}
@@ -405,7 +410,7 @@ export function EmailSequenceBuilder({
                             </div>
                             {steps.length > 1 && (
                               <button
-                                onClick={(e) => {
+                                onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                                   e.stopPropagation();
                                   handleRemoveStep(step.id);
                                 }}
@@ -461,7 +466,7 @@ export function EmailSequenceBuilder({
                               type="number"
                               min="0"
                               value={editingStep.delay}
-                              onChange={(e) =>
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                                 handleUpdateStep(editingStep.id, "delay", parseInt(e.target.value) || 0)
                               }
                               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -474,7 +479,7 @@ export function EmailSequenceBuilder({
                             </label>
                             <input
                               value={editingStep.subject}
-                              onChange={(e) =>
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                                 handleUpdateStep(editingStep.id, "subject", e.target.value)
                               }
                               placeholder="Use {{variables}} for personalization"
@@ -488,7 +493,7 @@ export function EmailSequenceBuilder({
                             </label>
                             <textarea
                               value={editingStep.body}
-                              onChange={(e) =>
+                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                                 handleUpdateStep(editingStep.id, "body", e.target.value)
                               }
                               placeholder="Available: {{contact_name}}, {{company_name}}, {{industry}}"
@@ -630,12 +635,12 @@ export function EmailSequenceBuilder({
         </div>
       </div>
 
-      {/* ✅ TEST EMAIL MODAL */}
+      {/* TEST EMAIL MODAL */}
       {showTestEmailModal && (
         <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4">
           <div 
             className="bg-white rounded-xl shadow-xl max-w-md w-full p-6"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -659,7 +664,7 @@ export function EmailSequenceBuilder({
                   type="email"
                   placeholder="test@example.com"
                   value={testEmail}
-                  onChange={(e) => setTestEmail(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTestEmail(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                 />
               </div>
