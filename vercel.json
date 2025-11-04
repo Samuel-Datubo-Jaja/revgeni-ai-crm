@@ -4,8 +4,7 @@
   "crons": [
     {
       "path": "/api/cron/send-emails",
-      "schedule": "0 9 * * *",
-      "name": "Email Sequences"
+      "schedule": "0 9 * * *"
     }
   ]
 }
