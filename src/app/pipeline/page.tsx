@@ -11,6 +11,9 @@ import CompanyCard from "@/components/CompanyCard";
 import EmptyState from "@/components/EmptyState";
 import { LeadFinderModal } from "@/components/LeadFinderModal";
 import { EmailSequenceBuilder } from "@/components/EmailSequenceBuilder";
+import { CompanyAssignmentModal } from '@/components/CompanyAssignmentModal'; // 🆕 ADD THIS
+import { DashboardCharts } from "@/components/DashboardCharts";
+import toast, { Toaster } from 'react-hot-toast';
 
 /* GraphQL */
 const Q_COMPANIES = gql`
@@ -29,7 +32,7 @@ const Q_COMPANIES = gql`
 `;
 
 const M_MOVE = gql`
-  mutation Move($id: ID!, $status: CompanyStatus!) {
+  mutation Move($id: ID!, $status: String!) {
     updateCompanyStatus(id: $id, status: $status) {
       id
       status
@@ -76,6 +79,7 @@ export default function PipelinePage() {
   const [search, setSearch] = useState("");
   const [openLeadFinder, setOpenLeadFinder] = useState(false);
   const [openEmailSequence, setOpenEmailSequence] = useState(false);
+  const [openCompanyAssignment, setOpenCompanyAssignment] = useState(false); // 🆕 ADD THIS
 
   // Redirect to sign-in if not authenticated
   useEffect(() => {
@@ -119,9 +123,42 @@ export default function PipelinePage() {
   }
 
   async function moveTo(id: string, status: Company["status"]) {
-    const client = getGqlClient();
-    await client.request(M_MOVE, { id, status });
-    qc.invalidateQueries({ queryKey: ["companies"] });
+    // Get company name for better toast message
+    const company = data?.find(c => c.id === id);
+    const companyName = company?.name || 'Company';
+    
+    try {
+      const client = getGqlClient();
+      await client.request(M_MOVE, { id, status });
+      qc.invalidateQueries({ queryKey: ["companies"] });
+      
+      // ✅ Success toast
+      toast.success(`${companyName} moved to ${status}`, {
+        duration: 3000,
+        position: 'top-right',
+        style: {
+          background: '#10B981',
+          color: '#fff',
+          fontWeight: '500',
+        },
+        icon: '✅',
+      });
+      
+    } catch (error) {
+      console.error('Error moving company:', error);
+      
+      // ❌ Error toast
+      toast.error(`Failed to move ${companyName}`, {
+        duration: 4000,
+        position: 'top-right',
+        style: {
+          background: '#EF4444',
+          color: '#fff',
+          fontWeight: '500',
+        },
+        icon: '❌',
+      });
+    }
   }
 
   if (!isLoaded || !userId) {
@@ -167,14 +204,31 @@ export default function PipelinePage() {
             </button>
 
             <button
-              onClick={seedDemo}
-              className="rounded-lg bg-gray-600 px-4 py-2 text-sm text-white hover:bg-gray-700 transition-colors font-medium whitespace-nowrap"
+              onClick={() => setOpenCompanyAssignment(true)}
+              className="rounded-lg bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700 transition-colors font-medium whitespace-nowrap"
             >
-              📊 Seed Demo
+              👥 Assign Companies
             </button>
+
+            {/* Only show in development */}
+            {process.env.NODE_ENV === 'development' && (
+              <button
+                onClick={seedDemo}
+                className="rounded-lg bg-gray-600 px-4 py-2 text-sm text-white hover:bg-gray-700 transition-colors font-medium whitespace-nowrap"
+              >
+                📊 Seed Demo
+              </button>
+            )}
           </div>
         </div>
       </header>
+
+      {/* Dashboard Charts Section */}
+      {data && data.length > 0 && (
+        <div className="mb-8">
+          <DashboardCharts companies={data} />
+        </div>
+      )}
 
       {/* Board */}
       {error ? (
@@ -212,9 +266,11 @@ export default function PipelinePage() {
                             <select
                               className="w-full rounded-lg border bg-white px-2 py-1 text-sm hover:border-blue-300 focus:border-blue-500 focus:outline-none"
                               value={c.status}
-                              onChange={(e) =>
-                                moveTo(c.id, e.target.value as Company["status"])
-                              }
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                moveTo(c.id, e.target.value as Company["status"]);
+                              }}
                             >
                               {STAGES.map((s) => (
                                 <option key={s} value={s}>
@@ -239,6 +295,45 @@ export default function PipelinePage() {
       <EmailSequenceBuilder
         open={openEmailSequence}
         onOpenChange={setOpenEmailSequence}
+      />
+      {/* 🆕 NEW MODAL */}
+      <CompanyAssignmentModal
+        open={openCompanyAssignment}
+        onClose={() => setOpenCompanyAssignment(false)}
+      />
+
+      {/* Toaster Component */}
+      <Toaster 
+        position="top-right"
+        reverseOrder={false}
+        gutter={8}
+        containerClassName=""
+        containerStyle={{}}
+        toastOptions={{
+          // Default options for all toasts
+          className: '',
+          duration: 3000,
+          style: {
+            background: '#363636',
+            color: '#fff',
+          },
+          // Success toast styling
+          success: {
+            duration: 3000,
+            style: {
+              background: '#10B981',
+              color: '#fff',
+            },
+          },
+          // Error toast styling
+          error: {
+            duration: 4000,
+            style: {
+              background: '#EF4444',
+              color: '#fff',
+            },
+          },
+        }}
       />
     </main>
   );
