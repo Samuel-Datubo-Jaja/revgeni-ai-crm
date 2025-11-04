@@ -10,4 +10,3 @@ export default defineConfig({
     directUrl: env("DIRECT_URL"),
   },
 });
-
