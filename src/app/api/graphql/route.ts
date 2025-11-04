@@ -3,7 +3,7 @@ import { createYoga } from "graphql-yoga";
 import { createSchema } from "graphql-yoga";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
-import { CompanyStatus } from "@prisma/client"; 
+ 
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -270,7 +270,7 @@ const resolvers = {
     updateCompanyStatus: async (_: unknown, args: { id: string; status: string }, context: GraphQLContext) => {
       const updatedCompany = await prisma.company.update({
         where: { id: args.id },
-        data: { status: args.status as CompanyStatus},
+        data: { status: args.status},
         include: {
           people: true,
           deals: true,
