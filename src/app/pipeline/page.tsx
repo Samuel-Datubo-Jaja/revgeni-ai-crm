@@ -226,7 +226,7 @@ export default function PipelinePage() {
       {/* Dashboard Charts Section */}
       {data && data.length > 0 && (
         <div className="mb-8">
-          <DashboardCharts companies={data} />
+          <DashboardCharts companies={data as any} />
         </div>
       )}
 
