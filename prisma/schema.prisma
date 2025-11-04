@@ -9,15 +9,17 @@ datasource db {
 }
 
 model Org {
-  id        String          @id @default(cuid())
-  name      String
-  createdAt DateTime        @default(now())
-  companies Company[]
-  deals     Deal[]
-  sequences EmailSequence[]
-  events    Event[]
-  people    Person[]
-  users     UserOrg[]
+  id                String          @id @default(cuid())
+  name              String
+  createdAt         DateTime        @default(now())
+  companies         Company[]
+  deals             Deal[]
+  sequences         EmailSequence[]
+  events             Event[]
+  people            Person[]
+  users             UserOrg[]
+  userConnections    UserConnection[]
+  companySequences  CompanySequence[]
 }
 
 model User {
@@ -25,6 +27,7 @@ model User {
   email     String    @unique
   createdAt DateTime  @default(now())
   orgs      UserOrg[]
+  connections UserConnection[]
 }
 
 model UserOrg {
@@ -54,6 +57,7 @@ model Company {
   deals     Deal[]
   events    Event[]
   people    Person[]
+  assignedSequences CompanySequence[]
 
   @@unique([orgId, domain])
   @@index([orgId, status])
@@ -66,29 +70,34 @@ model Person {
   fullName  String
   title     String?
   email     String?
+  phone     String?
   linkedin  String?
   createdAt DateTime @default(now())
   events    Event[]
-  company   Company  @relation(fields: [companyId], references: [id])
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   org       Org      @relation(fields: [orgId], references: [id])
 
   @@index([orgId, companyId])
+  @@map("people")
 }
 
 model Deal {
-  id        String   @id @default(cuid())
-  orgId     String
-  companyId String
-  name      String
-  value     Int?
-  stage     String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  company   Company  @relation(fields: [companyId], references: [id])
-  org       Org      @relation(fields: [orgId], references: [id])
-  events    Event[]
+  id                 String   @id @default(cuid())
+  orgId              String
+  companyId          String
+  name               String
+  value              Float?
+  stage              String
+  expectedCloseDate  DateTime? 
+  description        String?   
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  company            Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  org                Org      @relation(fields: [orgId], references: [id])
+  events             Event[]
 
   @@index([orgId, stage])
+  @@map("deals")
 }
 
 model Event {
@@ -118,6 +127,7 @@ model EmailSequence {
   fromEmail String?
   createdAt DateTime @default(now())
   org       Org      @relation(fields: [orgId], references: [id])
+  assignments CompanySequence[]
 }
 
 model OutboxEmail {
@@ -134,6 +144,47 @@ model OutboxEmail {
   createdAt   DateTime @default(now())
 
   @@index([orgId, scheduledAt, status])
+}
+
+model UserConnection {
+  id                String   @id @default(cuid())
+  userId            String
+  orgId             String
+  provider          String   // 'gmail', 'outlook', etc.
+  nangoConnectionId String   // The UUID from Nango
+  status            String   @default("active") // 'active', 'expired', 'revoked'
+  email             String?  // The connected email address
+  scopes            String[] // Granted permissions
+  connectedAt       DateTime @default(now())
+  lastUsedAt        DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org  Org  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+  @@map("user_connections")
+}
+
+model CompanySequence {
+  id          String   @id @default(cuid())
+  orgId       String
+  companyId   String
+  sequenceId  String
+  currentStep Int      @default(0)  
+  status      String   @default("active") 
+  startedAt   DateTime @default(now())
+  nextSendAt  DateTime? 
+  completedAt DateTime?
+  
+  company   Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sequence  EmailSequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  org       Org           @relation(fields: [orgId], references: [id])
+
+  @@unique([companyId, sequenceId]) 
+  @@index([orgId, nextSendAt, status])
+  @@map("company_sequences")
 }
 
 enum CompanyStatus {
